@@ -12,7 +12,12 @@ from traust_engine.corpus import resolver as corpus_resolver
 from traust_engine.locations import FINDINGS_DB_REL, FP_PRECEDENT_CACHE_REL
 
 from traust.cli.groups._registry import OpSpec
-from traust.context import analysis_results_dir, progress_tracker_dir
+from traust.context import (
+    add_ledger_binding_args,
+    analysis_results_dir,
+    bind_ledger,
+    progress_tracker_dir,
+)
 
 
 def _corpus_cfg(engine, config_path: Path | None):
@@ -335,6 +340,7 @@ def add_finding_identity_args(ap) -> None:
     p3.add_argument("new_audit", type=Path)
     p3.add_argument("layer", type=Path)
     p3.add_argument("--dry-run", action="store_true")
+    add_ledger_binding_args(p3)
     p3.add_argument(
         "--no-review-queue",
         action="store_true",
@@ -345,7 +351,8 @@ def add_finding_identity_args(ap) -> None:
 def call_finding_identity(engine, args) -> int:
     if args.identity_cmd == "fingerprint":
         return fi.run_fingerprint(
-            args.audit, write=args.write,
+            args.audit,
+            write=args.write,
             allow_identity_move=args.allow_identity_move,
         )
 
@@ -357,10 +364,12 @@ def call_finding_identity(engine, args) -> int:
 
     if args.identity_cmd == "backfill":
         return fi.run_backfill(
-            args.root, dry_run=args.dry_run,
+            args.root,
+            dry_run=args.dry_run,
             allow_identity_move=args.allow_identity_move,
         )
 
+    bind_ledger(engine, args)
     ledger_svc = engine.ledger.service(data_dir=args.layer.parent)
     r = fi.rebaseline(
         args.old_audit,

@@ -32,13 +32,21 @@ def test_noninteractive_install_copies_every_copyable_template(tmp_path):
     written = sorted(p.name for p in home.iterdir())
     # every non-key template, plus the three shipped-as-is filled defaults
     # (model-registry + the MANIFEST-required feeds/external-tools).
+    # storage.yaml / ledger.yaml are opt-in: a copied example DSN would switch the
+    # deployment to a database that does not exist, so they are never auto-copied.
+    opt_in = {"storage.yaml", "ledger.yaml"}
     expected = sorted(
-        [t.name.replace(".example", "") for t in TEMPLATES if not t.name.endswith(".pub")]
+        [
+            t.name.replace(".example", "")
+            for t in TEMPLATES
+            if not t.name.endswith(".pub") and t.name.replace(".example", "") not in opt_in
+        ]
         + ["model-registry.yaml", "feeds.yaml", "external-tools.yaml"]
     )
     for shipped in ("model-registry.yaml", "feeds.yaml", "external-tools.yaml"):
         assert (home / shipped).read_text() == (REPO / "config" / shipped).read_text()
     assert written == expected
+    assert not any((home / name).exists() for name in opt_in)
     # the key template is instructions, never copied as a key
     assert not (home / "ledger-signing-key.pub").exists()
     assert "ledger-signing-key.pub" in r.stdout

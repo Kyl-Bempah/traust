@@ -62,6 +62,8 @@ from traust_engine.ledger import LedgerService
 
 from traust.context import (
     add_config_home_arg,
+    add_ledger_binding_args,
+    bind_ledger,
     default_findings_roots,
     load_engine,
 )
@@ -419,6 +421,7 @@ def append_to_layer(
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     add_config_home_arg(parser)
+    add_ledger_binding_args(parser)
     parser.add_argument("triage", help="validated TRIAGE.json / *-triage.json")
     parser.add_argument(
         "--audit", required=True, help="the *-security-audit.json the triage annotates"
@@ -459,6 +462,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     weights_path = args.weights or optional_config_path("hardening-risk-weights.json")
 
     try:

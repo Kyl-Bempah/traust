@@ -263,7 +263,7 @@ with an OIDC provider leave `HARNESS_COUNTERSIGN_ALLOW_LOCAL` unset.
 
 An **employee-directory cross-check** ("is this identity a current active
 employee") is a deployment concern, not an identity proof. A deployment
-supplies it as a command: `LEDGER_DIRECTORY_COMMAND="<cmd>"` is run as
+supplies it as a command in `ledger.yaml` → `identity.directory_command: "<cmd>"`, run as
 `<cmd> <identity>` and must print `RESULT uid=<identity> status=<…>`; only
 `active` passes and is stamped as `employee_status`; anything else, or a
 command that cannot answer, refuses. The SDK applies it on every write path;

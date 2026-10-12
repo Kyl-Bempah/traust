@@ -793,7 +793,7 @@ LOCAL_PROVIDER = "local"
 ALLOW_LOCAL_ENV = "HARNESS_COUNTERSIGN_ALLOW_LOCAL"
 
 
-def resolve_actor() -> dict:
+def resolve_actor(directory: object | None = None) -> dict:
     """The signer, as the ledger identity token proves them (``whoami``).
 
     Until 2026-09-08 this CLI ran its own LDAP check (a corporate script)
@@ -808,9 +808,12 @@ def resolve_actor() -> dict:
     same actor from the same token and stamps it on every event; the dict
     returned here is for the receipt only.
 
+    *directory* is the deployment's employee directory from ``ledger.yaml``
+    (``engine.ledger.settings.directory``); ``None``/``False`` means none.
+
     Raises RuntimeError when no verifiable token exists, the token is a
-    machine identity, the deployment's employee directory
-    (``LEDGER_DIRECTORY_COMMAND``) does not report the holder ``active``, or
+    machine identity, the configured employee directory does not report the
+    holder ``active``, or
     the token is self-minted (``identity_provider: local``) without
     ``HARNESS_COUNTERSIGN_ALLOW_LOCAL=1``.
     """
@@ -818,7 +821,6 @@ def resolve_actor() -> dict:
         DirectoryRefusedError,
         DirectoryUnavailableError,
         apply_directory,
-        load_directory,
     )
     from traust_ledger.cli.identity.actor import require_verified_actor
 
@@ -833,11 +835,11 @@ def resolve_actor() -> dict:
             f"ledger identity {actor.identity!r} is a {actor.kind} identity — "
             "countersignatures require a human signer; recording refused"
         )
-    # The deployment's optional employee-directory cross-check
-    # (LEDGER_DIRECTORY_COMMAND). The SDK applies the same check again at
+    # The deployment's optional employee-directory cross-check (ledger.yaml
+    # identity.directory_command). The SDK applies the same check again at
     # submit; doing it here refuses before the queue is even parsed.
     try:
-        actor = apply_directory(actor, load_directory())
+        actor = apply_directory(actor, directory or None)
     except (DirectoryRefusedError, DirectoryUnavailableError) as exc:
         raise RuntimeError(f"{exc.detail}; recording refused") from exc
     if (actor.identity_provider or "").lower() == LOCAL_PROVIDER and os.environ.get(
@@ -948,12 +950,13 @@ def record_decisions(
             if engine is not None
             else LedgerService(data_dir=lp.parent)
         )
-        # Read-only view for alias state and default rationales. Every write
+        # Current view (file, or the bound database layer) for alias state and
+        # default rationales. Every write
         # below goes through the SDK (countersign / patch_layer_file), which
         # verifies the token, builds and dedupes the event, runs the human-lane
         # gates, stamps the actor, finalizes (Merkle) and signs atomically —
         # the harness never assembles, appends, or signs layers itself.
-        layer = json.loads(lp.read_text(encoding="utf-8"))
+        layer = ledger.read_layer_file(lp)
         aliases_changed = False
         for d in ds:
             if d["decision"] == "defer":
@@ -1056,10 +1059,11 @@ def record_decisions(
             receipt.append(f"  {d['decision']:<10} {d['finding']} recorded{suffix}")
         if aliases_changed:
             ledger.patch_layer_file(lp, {"finding_aliases": layer["metadata"]["finding_aliases"]})
-        # Re-read the on-disk layer the SDK just wrote (stamped actors, signed
-        # Merkle root); everything downstream (queue close, cumulative rebuild)
-        # reads exactly what was signed.
-        layer = json.loads(lp.read_text(encoding="utf-8"))
+        # Re-read the layer the SDK just wrote (stamped actors, signed Merkle
+        # root) — the file, or the database layer when ledger.yaml sets a dsn;
+        # everything downstream (queue close, cumulative rebuild) reads exactly
+        # what was signed.
+        layer = ledger.read_layer_file(lp)
 
         # Close the queue entries these decisions answer. Until 2026-08-25
         # nothing did: the event was appended and the needs_review item stayed
@@ -1144,7 +1148,7 @@ def cmd_apply(args) -> int:
         print("No marked decisions found in the queue file.", file=sys.stderr)
         return 1
     try:
-        actor = resolve_actor()
+        actor = resolve_actor(engine.ledger.settings.directory)
     except (RuntimeError, OSError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -1182,7 +1186,7 @@ def cmd_record(args) -> int:
             return 2
         decision = f"severity={args.severity}"
     try:
-        actor = resolve_actor()
+        actor = resolve_actor(engine.ledger.settings.directory)
     except (RuntimeError, OSError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1

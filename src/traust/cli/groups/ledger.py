@@ -21,6 +21,11 @@ _ENTRIES: tuple[tuple[str, str, str], ...] = (
         "Emit track-findings disposition-ledger events from a *-remediation report.",
     ),
     (
+        "pull",
+        "ledger_pull",
+        "Export the run's Ledger database layer as a read-only snapshot (ledger.yaml dsn).",
+    ),
+    (
         "doc-variance",
         "emit_doc_variance",
         "Doc-variance register writer (doc-variance lane — the ONLY writer).",
