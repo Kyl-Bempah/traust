@@ -49,7 +49,10 @@ from traust.cli.emit_validation_ledger_events import (
 )
 from traust.context import (
     add_config_home_arg,
+    add_ledger_binding_args,
     analysis_results_dir,
+    bind_ledger,
+    ledger_binding_argv,
     load_engine,
 )
 from traust.lib.event_time import recorded_at_arg, report_occurred_at
@@ -225,6 +228,7 @@ def process_report(
     dry_run: bool,
     build_cumulative: bool,
     engine=None,
+    child_ledger_argv: tuple[str, ...] = (),
 ) -> dict:
     report = json.loads(report_path.read_text(encoding="utf-8"))
     try:
@@ -266,6 +270,7 @@ def process_report(
                     str(layer_path),
                     "--generated-at",
                     recorded_at,
+                    *child_ledger_argv,
                 ],
                 capture_output=True,
                 text=True,
@@ -297,6 +302,7 @@ def process_report(
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     add_config_home_arg(parser)
+    add_ledger_binding_args(parser)
     parser.add_argument("report", help="a *-remediation-verification.json report")
     parser.add_argument(
         "--results-root",
@@ -318,6 +324,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     results_root = (args.results_root or analysis_results_dir(engine)).resolve()
     if not results_root.is_dir():
         print(f"ERROR: results root {results_root} not found", file=sys.stderr)
@@ -337,6 +344,7 @@ def main(argv=None) -> int:
             dry_run=args.dry_run,
             build_cumulative=args.build_cumulative,
             engine=engine,
+            child_ledger_argv=tuple(ledger_binding_argv(args)),
         )
     except (OSError, json.JSONDecodeError, ValueError) as e:
         print(f"ERROR: {report_path}: {e}", file=sys.stderr)

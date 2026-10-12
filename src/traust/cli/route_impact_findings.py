@@ -80,6 +80,8 @@ from traust.cli.route_regressions import (
 )
 from traust.context import (
     add_config_home_arg,
+    add_ledger_binding_args,
+    bind_ledger,
     findings_db,
     load_engine,
 )
@@ -540,6 +542,7 @@ def route_artifact(
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     add_config_home_arg(ap)
+    add_ledger_binding_args(ap)
     ap.add_argument("artifact", type=Path, help="<cve>-impact-analysis.json from /impact-analysis")
     ap.add_argument(
         "--severity",
@@ -568,6 +571,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     db = args.db or findings_db(engine)
     graph_db = args.graph_db or engine.portfolio.portfolio_graph_db()
 

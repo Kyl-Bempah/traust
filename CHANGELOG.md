@@ -2,6 +2,43 @@
 
 All notable changes to Traust are documented here.
 
+## [0.15.0]
+
+- **The ledger is configured in `ledger.yaml`, not environment variables.**
+  New templates `config/ledger.example.yaml` and `config/storage.example.yaml`
+  (traust-contracts 0.53.0 shape: `dsn`, `signing`, `identity`). They are
+  opt-in: `install_traust` lists them but never copies them, since an example
+  DSN would switch the deployment to a database that does not exist.
+- With `ledger.yaml` `dsn` set, the Ledger database is the authority for
+  disposition layers and `*-findings-layer.json` becomes a read-only snapshot,
+  so countersigns written outside the harness (e.g. in SCI) reach the next run.
+  Every ledger writer — `emit-triage`, `emit-validation`, `emit-verification`,
+  `route_regressions`, `route_impact_findings`, `build_cumulative`,
+  `ledger pull`, `corpus finding-identity rebaseline`, the fuzz emitter and
+  `baseline_claims` — takes `--ledger-layer` / `--product-repo` and binds the
+  run's layer once (traust-engine 0.21.0 `engine.ledger.bind`); the emitters
+  forward it to the `build_cumulative` they spawn, and `countersign` reads the
+  layer through the ledger service. Without a `dsn`, file mode is unchanged.
+  Read-only sweeps (`build_verify_sweep`, the fuzz cross-layer fingerprint
+  lookup) read layer files, which are the snapshots in database mode.
+- New `traust ledger pull <layer>` exports the bound layer as that snapshot
+  before an LLM session.
+- `build_cumulative` reads the layer through the ledger service, so its claim
+  check and cumulative report see the database layer, not a stale file.
+- **Breaking: signing and the employee directory come from `ledger.yaml`.**
+  With traust-engine 0.21.0 no `LAAS_SIGNING_*` or `LEDGER_DIRECTORY_COMMAND`
+  variable configures a harness run: set `signing` (method, key path,
+  `required`) and `identity.directory_command` in the mounted `ledger.yaml`.
+  `countersign` and `compliance_scope_intake` take their up-front directory
+  check from the same configured directory. Docs (`signing.md`,
+  `disposition-ledger.md`, `setup.md`, `architecture.md`, `requirements.md`,
+  skills) describe the config keys instead of the variables; only the
+  standalone `ledger` CLI still reads its own `LAAS_SIGNING_*`.
+- New `ledger-db` extra (`traust-ledger[db]`) for the database backend.
+- Pins traust-engine 0.21.0 (traust-security/traust-engine#21), traust-ledger
+  0.11.1 and traust-contracts 0.53.0, all from `traust-security`.
+- `docs/report-structure.md` lists every `remediation_effort` value.
+
 ## [0.14.0]
 
 - **The scheduled threat-model check-up applies OWASP ratings.** A new

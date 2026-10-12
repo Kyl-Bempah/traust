@@ -217,7 +217,10 @@ A required-but-absent (or still-a-template) config file raises
 `DeploymentConfigMissing` **at the entry point** — fail once, loudly, with the
 fix named, never deep in a module at an unpredictable moment. Signing is
 optional: with no `ledger-signing-key.pub`, the ledger records unsigned and
-verification is skipped (set `LAAS_SIGNING_REQUIRED=1` to enforce).
+verification is skipped (set `ledger.yaml` → `signing.required` to enforce).
+Ledger mode, signing and token verification are `ledger.yaml` (optional): with a
+`dsn` the Ledger database is the authority and layer files are read-only
+snapshots; every ledger CLI then takes `--ledger-layer` / `--product-repo`.
 
 **What stays environment-driven** (deliberately, not config): secrets
 (`GITHUB_TOKEN`, LDAP bind-password file, signing key *paths*), OS/tool

@@ -81,37 +81,40 @@ def _no_directory(monkeypatch):
 def test_directory_refusal_blocks_before_anything(monkeypatch):
     from traust_ledger.auth.directory import ScriptDirectory
 
-    monkeypatch.setattr(
-        "traust_ledger.auth.directory.load_directory",
-        lambda env=None: ScriptDirectory(
-            [
-                sys.executable,
-                "-c",
-                "import sys; print(f'RESULT uid={sys.argv[1]} status=terminated')",
-            ]
-        ),
+    directory = ScriptDirectory(
+        [sys.executable, "-c", "import sys; print(f'RESULT uid={sys.argv[1]} status=terminated')"]
     )
     with _with_actor(HUMAN), pytest.raises(RuntimeError, match="terminated"):
-        cs.resolve_actor()
+        cs.resolve_actor(directory)
 
 
 def test_directory_active_is_stamped(monkeypatch):
     from traust_ledger.auth.directory import ScriptDirectory
 
-    monkeypatch.setattr(
-        "traust_ledger.auth.directory.load_directory",
-        lambda env=None: ScriptDirectory(
-            [sys.executable, "-c", "import sys; print(f'RESULT uid={sys.argv[1]} status=active')"]
-        ),
+    directory = ScriptDirectory(
+        [sys.executable, "-c", "import sys; print(f'RESULT uid={sys.argv[1]} status=active')"]
     )
     with _with_actor(HUMAN):
-        assert cs.resolve_actor()["employee_status"] == "active"
+        assert cs.resolve_actor(directory)["employee_status"] == "active"
 
 
-def test_directory_misconfiguration_refuses(monkeypatch):
+def test_directory_misconfiguration_refuses(tmp_path):
+    """A configured directory command that does not exist fails closed at load."""
+    from traust_contracts.config import LedgerConfig, LedgerIdentity
+    from traust_engine.ledger import ClientSettings
+    from traust_ledger.auth.directory import DirectoryUnavailableError
+
+    with pytest.raises(DirectoryUnavailableError):
+        ClientSettings.from_config(
+            LedgerConfig(identity=LedgerIdentity(directory_command="/nonexistent/check-employee"))
+        )
+
+
+def test_environment_directory_is_ignored(monkeypatch):
+    """LEDGER_DIRECTORY_COMMAND in the environment is not the deployment's directory."""
     monkeypatch.setenv("LEDGER_DIRECTORY_COMMAND", "/nonexistent/check-employee")
-    with _with_actor(HUMAN), pytest.raises(RuntimeError, match="unusable"):
-        cs.resolve_actor()
+    with _with_actor(HUMAN):
+        assert "employee_status" not in cs.resolve_actor(None)
 
 
 def test_source_has_no_ldap_or_direct_write_path():
@@ -158,15 +161,18 @@ def test_end_to_end_submit_stamps_token_actor_and_signs(tmp_path):
         ["cosign", "generate-key-pair"], cwd=keys, env=env, check=True, capture_output=True
     )
     lp = _fixture(tmp_path)
-    env.update(
-        {
-            "LEDGER_LOCAL_IDENTITY": "smoketest",
-            "LAAS_SIGNING_REQUIRED": "true",
-            "LAAS_SIGNING_KEY_PATH": str(keys / "cosign.key"),
-        }
+    # Signing is deployment config: a mounted ledger.yaml, never LAAS_SIGNING_*.
+    config_home = tmp_path / "config"
+    shutil.copytree(Path(__file__).parent / "fixtures" / "config", config_home)
+    (config_home / "ledger.yaml").write_text(
+        f"signing:\n  required: true\n  method: keypair\n  key_path: {keys / 'cosign.key'}\n",
+        encoding="utf-8",
     )
+    env.update({"LEDGER_LOCAL_IDENTITY": "smoketest", "TRAUST_CONFIG_HOME": str(config_home)})
     for k in ("LAAS_TOKEN", "LEDGER_TOKEN", "LEDGER_TOKEN_PATH", "HARNESS_COUNTERSIGN_ALLOW_LOCAL"):
         env.pop(k, None)
+    for k in [k for k in env if k.startswith("LAAS_SIGNING_")]:
+        env.pop(k)
 
     # a self-minted token is refused unless the deployment opts in — and
     # the refusal happens before any write
@@ -250,7 +256,15 @@ def test_end_to_end_submit_stamps_token_actor_and_signs(tmp_path):
         "table = {'smoketest': 'terminated', 'second': 'active'}\n"
         "print(f\"RESULT uid={sys.argv[1]} status={table.get(sys.argv[1], 'not_found')}\")\n"
     )
-    env["LEDGER_DIRECTORY_COMMAND"] = f"{sys.executable} {dir_script}"
+    (config_home / "ledger.yaml").write_text(
+        "signing:\n"
+        "  required: true\n"
+        "  method: keypair\n"
+        f"  key_path: {keys / 'cosign.key'}\n"
+        "identity:\n"
+        f"  directory_command: {sys.executable} {dir_script}\n",
+        encoding="utf-8",
+    )
     before = lp.read_text()
     rd = subprocess.run(
         [
@@ -313,4 +327,3 @@ def test_end_to_end_submit_stamps_token_actor_and_signs(tmp_path):
     assert (
         humans["smoketest"].get("employee_status") is None
     )  # recorded before the directory was configured
-    env.pop("LEDGER_DIRECTORY_COMMAND")

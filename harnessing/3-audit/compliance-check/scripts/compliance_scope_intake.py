@@ -13,7 +13,7 @@ Identity rail (rail 2): a boundary declaration is a claim an auditor
 holds someone to. With --verify-identity the declarant must be the holder
 of the ledger identity token (`ledger auth login` / `ledger auth local`),
 verified by the SDK, and must pass the deployment's optional employee-
-directory cross-check (LEDGER_DIRECTORY_COMMAND); verification failure
+directory cross-check (ledger.yaml identity.directory_command); verification failure
 records the entry as draft:<id>, never as signed. Without
 --verify-identity the entry is ALWAYS draft:<id> — signing requires the
 verification path.
@@ -68,24 +68,25 @@ def _pairs(items: list[str], flag: str) -> list[dict]:
     return out
 
 
-def verify_identity(uid: str) -> bool:
+def verify_identity(uid: str, directory: object | None = None) -> bool:
     """The declarant is the ledger identity token holder.
 
     Resolves and verifies the current token (traust-ledger SDK), applies the
-    deployment's optional employee-directory cross-check, and requires the
+    deployment's optional employee-directory cross-check (*directory*, from
+    ``ledger.yaml`` via ``engine.ledger.settings.directory``), and requires the
     verified identity to be ``uid`` (full identity, subject, or the local
     part of an email). False on any failure — fail closed. Until 2026-09-08
     this ran an LDAP lookup of the *typed* uid, which proved a name existed,
     not that the declarant held it.
     """
     try:
-        from traust_ledger.auth.directory import apply_directory, load_directory
+        from traust_ledger.auth.directory import apply_directory
         from traust_ledger.cli.identity.actor import require_verified_actor
 
         actor = require_verified_actor()
         if actor is None or actor.kind != "human":
             return False
-        actor = apply_directory(actor, load_directory())
+        actor = apply_directory(actor, directory or None)
     except Exception:
         return False
     want = (uid or "").strip().lower()
@@ -139,7 +140,7 @@ def main(argv=None) -> int:
 
     declared_by = args.declared_by
     if args.verify_identity:
-        if verify_identity(args.declared_by):
+        if verify_identity(args.declared_by, engine.ledger.settings.directory):
             print(f"identity verified: {args.declared_by} (ledger token holder)")
         else:
             declared_by = f"draft:{args.declared_by}"

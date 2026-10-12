@@ -103,7 +103,10 @@ from traust_engine.ledger import (
 
 from traust.context import (
     add_config_home_arg,
+    add_ledger_binding_args,
     analysis_results_dir,
+    bind_ledger,
+    ledger_binding_argv,
     load_engine,
     workspace_dir,
 )
@@ -672,6 +675,7 @@ def process_report(
     build_cumulative: bool,
     *,
     engine=None,
+    child_ledger_argv: tuple[str, ...] = (),
 ) -> dict:
     report = json.loads(report_path.read_text(encoding="utf-8"))
     try:
@@ -740,6 +744,7 @@ def process_report(
                     str(layer_path),
                     "--generated-at",
                     recorded_at,
+                    *child_ledger_argv,
                 ],
                 capture_output=True,
                 text=True,
@@ -771,6 +776,7 @@ def process_report(
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     add_config_home_arg(parser)
+    add_ledger_binding_args(parser)
     parser.add_argument("report", nargs="?", help="a *-validation.json live-validation report")
     parser.add_argument(
         "--manifest",
@@ -804,6 +810,7 @@ def main(argv=None) -> int:
         parser.error("provide exactly one of <report> or --manifest")
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     results_root = (args.results_root or analysis_results_dir(engine)).resolve()
     if not results_root.is_dir():
         print(f"ERROR: results root {results_root} not found", file=sys.stderr)
@@ -833,7 +840,13 @@ def main(argv=None) -> int:
     for rp in reports:
         try:
             totals = process_report(
-                rp, resolver, recorded_at, args.dry_run, args.build_cumulative, engine=engine
+                rp,
+                resolver,
+                recorded_at,
+                args.dry_run,
+                args.build_cumulative,
+                engine=engine,
+                child_ledger_argv=tuple(ledger_binding_argv(args)),
             )
         except (OSError, json.JSONDecodeError, ValueError) as e:
             print(f"ERROR: {rp}: {e}", file=sys.stderr)

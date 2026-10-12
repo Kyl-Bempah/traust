@@ -53,7 +53,7 @@ from traust_engine.assets import harness_version as _engine_harness_version
 from traust_engine.ledger import report_sha256
 from traust_engine.reporting.validate import compute_claim_hash
 
-from traust.context import add_config_home_arg, load_engine
+from traust.context import add_config_home_arg, add_ledger_binding_args, bind_ledger, load_engine
 
 
 def _load(path: Path, what: str) -> dict:
@@ -303,6 +303,7 @@ def main(argv=None) -> int:
         "report in its disposition layer."
     )
     add_config_home_arg(ap)
+    add_ledger_binding_args(ap)
     sub = ap.add_subparsers(dest="cmd", required=True)
     for name in ("record", "verify"):
         sp = sub.add_parser(name)
@@ -324,6 +325,7 @@ def main(argv=None) -> int:
     sp.add_argument("root", help="Findings tree to walk (e.g. analysis-results/findings)")
     args = ap.parse_args(argv)
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     if args.cmd == "sweep":
         return sweep(Path(args.root), engine=engine)
     audit, layer = Path(args.audit), Path(args.layer)

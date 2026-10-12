@@ -54,7 +54,9 @@ from traust_engine.ledger import (
 
 from traust.context import (
     add_config_home_arg,
+    add_ledger_binding_args,
     analysis_results_dir,
+    bind_ledger,
     load_engine,
 )
 from traust.paths import HARNESS_ROOT
@@ -420,6 +422,7 @@ def plan(
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     add_config_home_arg(ap)
+    add_ledger_binding_args(ap)
     # Path("") is Path("."), which is truthy -- an `or` fallback here silently
     # resolves every default to the cwd. Test the string, not the Path.
     _env_summary = os.environ.get("FUZZ_CAMPAIGN_SUMMARY", "").strip()
@@ -440,6 +443,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     if args.summary is None:
         args.summary = analysis_results_dir(engine).parent / "FUZZ-CAMPAIGN-SUMMARY.json"
     if args.corpus is None:

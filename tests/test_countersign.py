@@ -108,6 +108,9 @@ def _fake_ledger():
         inst.resolve_review_item.side_effect = _fake_resolve
         inst.patch_layer_file.side_effect = _fake_patch
         inst.countersign.side_effect = _fake_countersign
+        inst.read_layer_file.side_effect = lambda layer_path: json.loads(
+            Path(layer_path).read_text()
+        )
         mock_cls.return_value = inst
         yield
 
