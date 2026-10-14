@@ -521,14 +521,25 @@ def coverage_failures(repo: Path = REPO) -> list[str]:
     # suffices (placement is editorial).
     skill_pages = ("README.md", "docs/standalone-usage.md", "docs/campaign-workflow.md")
     schema_pages = ("README.md", "docs/tooling-and-structure-files.md")
+    doc_pages = ("README.md", "docs/README.md")
+    readme = repo / "README.md"
+    if (repo / "docs" / "README.md").is_file() and readme.is_file():
+        if "docs/README.md" not in readme.read_text(encoding="utf-8"):
+            failures.append(
+                "README.md: does not link the docs index docs/README.md — "
+                "pages listed only in the index are unreachable"
+            )
     for doc_rel, items, label, required in (
         (skill_pages, skills, "skill", None),
         # docs/skills.md is the reference: each skill needs its own section
         ("docs/skills.md", skills, "skill", "## {item}"),
         (schema_pages, schemas, "schema", None),
-        # every guide under docs/ must be reachable from the README —
-        # an unlinked doc is invisible to harness users
-        ("README.md", docs_md, "doc", None),
+        # every guide under docs/ must be reachable from the README — an
+        # unlinked doc is invisible to harness users. Since 2026-10-14 the
+        # README links one docs/ index (docs/README.md) instead of listing
+        # every page, so a mention in either suffices; the README → index
+        # link itself is checked below, keeping every page one hop away.
+        (doc_pages, docs_md, "doc", None),
     ):
         pages = (doc_rel,) if isinstance(doc_rel, str) else doc_rel
         present = [repo / p for p in pages if (repo / p).is_file()]
