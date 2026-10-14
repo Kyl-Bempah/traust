@@ -966,12 +966,22 @@ miss shape; deep-fn plan Phase B2):
 python harnessing/3-audit/secure-code-audit/scripts/enumerate_route_guards.py <local-path> --out /tmp/<repo>-route-guards.json [--index <symbols.db>]
 ```
 
-v1 enumerates go-http (net/http, gorilla, chi/echo/gin verb styles,
-receiver-scoped `.Use` middleware) and django-drf (urls.py →
+It enumerates go-http (net/http, gorilla, chi/echo/gin verb styles,
+receiver-scoped `.Use` middleware), django-drf (urls.py →
 permission_classes/decorators, `DEFAULT_PERMISSION_CLASSES` baseline,
-`AllowAny` as an explicit unguard marker). Other detected frameworks
-appear as `coverage_gaps`. Guard recognition is name-based and
-over-inclusive by design — the judge decides enforcement.
+`AllowAny` as an explicit unguard marker) and flask (route/verb
+decorators, `add_url_rule` incl. MethodView classes, Flask-RESTful /
+flask-restx resources; class `decorators`/`method_decorators`; a
+`before_request` hook that can reject a request is a receiver- or
+app-scoped baseline in `scope_guards`). Flask rows add a per-guard-family
+asymmetry shape: a check (scope, admin, role, permission, token, …) that
+most rows of one view class or blueprint carry but a guarded sibling
+lacks marks that sibling `guard_family_gaps` — judge it like any
+asymmetry. Rows with `pattern_dynamic: true` carry a computed path as
+source text; `test_path: true` rows sit under a test/example directory.
+Other detected frameworks appear as `coverage_gaps`. Guard recognition
+is name-based and over-inclusive by design — the judge decides
+enforcement.
 
 Judging protocol — the lane may NOT close with unjudged rows:
 
