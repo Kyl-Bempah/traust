@@ -2,6 +2,34 @@
 
 All notable changes to Traust are documented here.
 
+## [0.16.0]
+
+- **The route×guard pre-scan enumerates Flask.** `enumerate_route_guards.py`
+  gains a `flask` family, parsed with `ast` (target code is never imported):
+  `@<app|blueprint>.route` and verb decorators, `add_url_rule()` including
+  MethodView/View `.as_view()` classes (one row per HTTP method the class
+  defines), and Flask-RESTful / flask-restx `add_resource()` and
+  `@<api|namespace>.route` resource classes. Guards come from handler and
+  method decorators, class `decorators` / `method_decorators` (inherited
+  through in-repo base classes) and `before_request` / `before_app_request`
+  hooks that can reject a request. A blueprint hook covers that blueprint;
+  an app hook covers the same app object and the blueprints its file
+  registers, never every route in the tree. Explicit public / exempt
+  decorators are unguard markers.
+- Flask rows add a second asymmetry shape: a guard family (scope, admin,
+  role, permission, csrf, token, authn) carried by most rows of one view
+  class or blueprint but missing from a guarded sibling marks that sibling
+  `judgement_required` with `guard_family_gaps`. Computed paths are kept
+  as source text with `pattern_dynamic: true` (module-level string
+  constants resolve to their literal), and rows under a test/example
+  directory carry `test_path: true`.
+- A tree that imports Flask but has no recognizable registration reports a
+  `flask` coverage gap rather than reading as clean; Flask is no longer a
+  coverage gap when it was enumerated. Files that also import FastAPI never
+  contribute verb-decorator rows.
+- `secure-code-audit` SKILL.md and `docs/language-support.md` list the new
+  family.
+
 ## [0.15.1]
 
 - **The docs gate accepts the `docs/README.md` index.** Since the README
