@@ -2,6 +2,16 @@
 
 All notable changes to Traust are documented here.
 
+## [0.15.1]
+
+- **The docs gate accepts the `docs/README.md` index.** Since the README
+  rewrite (#68), the root README links one reader's map, `docs/README.md`,
+  instead of listing every guide, and the enumeration-coverage check failed
+  for 24 pages. A `docs/` page now counts as reachable when the README or
+  the index mentions it, and a new check fails if the README stops linking
+  the index, so every page stays one hop from the README.
+- `docs/cli-reference.md` lists `ledger pull`.
+
 ## [0.15.0]
 
 - **The ledger is configured in `ledger.yaml`, not environment variables.**

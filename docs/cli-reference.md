@@ -29,7 +29,7 @@ python3 -m traust.cli check skill-alignment      # equivalent
 | `dashboard` | Dashboard rebuilds | `refresh` |
 | `feeds` | Feed management | `fetch`, `reconcile-cve-provenance` |
 | `impact` | Impact analysis | `analyze`, `calibrate-rule-pack`, `cluster-state-diff`, `resolve-advisory-symbols`, `sweep` |
-| `ledger` | Ledger emission | `doc-variance`, `emit-triage`, `emit-validation`, `emit-verification` |
+| `ledger` | Ledger emission | `doc-variance`, `emit-triage`, `emit-validation`, `emit-verification`, `pull` |
 | `metrics` | Metrics & spend | `attribute-spend`, `collect-spend`, `history`, `sla`, `spend` |
 | `portfolio` | Portfolio graph | `artifacts`, `build`, `deps-multi`, `freshness`, `interfaces`, `parsers`, `query`, `stats`, `symbols` |
 | `registry` | Model/product registry | `models`, `products` |
