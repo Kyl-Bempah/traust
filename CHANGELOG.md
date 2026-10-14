@@ -2,6 +2,42 @@
 
 All notable changes to Traust are documented here.
 
+## [0.17.0]
+
+- **Rule pack v1.8: authentication, ownership and crypto-hygiene
+  rules.** Seven new or widened opengrep rules for defect classes that
+  review missed and no rule surfaced (see the pack README for each rule's
+  shape and exclusions):
+  - `traust-python-injection-like-wildcard-unescaped` and
+    `traust-go-injection-like-wildcard-unescaped` (CWE-155): a LIKE/ILIKE
+    pattern built from a run-time value with `%`/`_` left live, through an
+    ORM pattern operator, raw SQL text, or a wildcard-concatenated bound
+    argument. Escape helpers and ESCAPE clauses sanitize; DDL
+    `(LIKE table …)` is excluded.
+  - `traust-python-authentication-jwt-signature-unverified` (new
+    `python/authentication.yaml`) and
+    `traust-go-authentication-jwt-signature-unverified` (CWE-347): token
+    decoding with signature verification off, including the conditional
+    shape (options mutated under a test/debug flag), `verify=False`, the
+    `none` algorithm, Go key functions that return no key, and
+    `ParseUnverified`.
+  - `traust-python-input-validation-pickle-loads-taint` now also sinks on
+    `Unpickler(...).load()` (including subclasses), `dill`, `jsonpickle`
+    and `shelve`. The new
+    `traust-python-input-validation-restricted-unpickler-inventory` (INFO)
+    lists every `Unpickler` subclass overriding `find_class`, so a negative
+    result cannot report deserialization absent where one exists.
+  - `traust-python-cryptography-secret-compare-not-constant-time` and
+    `traust-go-cryptography-secret-compare-not-constant-time` (CWE-208,
+    LOW confidence): `==`/`!=`/`bytes.Equal` on secret-named operands,
+    excluding literal, nil, error-sentinel, enum-constant and
+    metadata-named comparisons.
+- The rules are authored in the harness pack
+  (`harnessing/3-audit/secure-code-audit/opengrep-rules/`). A run uses them
+  when `locations.opengrep_rules` (or `--rule-pack`) points at that
+  directory; the copy bundled in traust-engine is unchanged by this
+  release.
+
 ## [0.16.0]
 
 - **The route×guard pre-scan enumerates Flask.** `enumerate_route_guards.py`
