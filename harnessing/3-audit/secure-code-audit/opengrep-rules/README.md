@@ -146,6 +146,46 @@ exercised at scan level only. File-level co-occurrence constraints
 (`pattern-inside: pattern-regex:` with an anchored lookahead) scan
 comments too — fixtures must not name the lexicon words they test.
 
+v1.8 (2026-10-14) — the **authentication, ownership and crypto-hygiene
+tranche**, seeded from the scanning-skills coverage plan's defect classes
+(C1 credential acceptance, C2 ownership resolution, C3 security-relevant
+configuration flags) and its deserialization-completeness hygiene item.
+These are seeded rules, not mined ones: each encodes a defect shape that
+review missed and no existing rule could surface. Their precision is
+unmeasured until the campaign judges their facts (`/mine-ledger`).
+
+- `traust-python-injection-like-wildcard-unescaped`,
+  `traust-go-injection-like-wildcard-unescaped` (CWE-155, class CWE-943):
+  a LIKE/ILIKE pattern assembled from a run-time value, through an ORM
+  pattern operator (SQLAlchemy `like`/`ilike`, peewee `**`), raw SQL text,
+  or a bound argument that is itself a wildcard concatenation. An escape
+  helper or an ESCAPE clause sanitizes. Pattern rules, not taint: a
+  self-chosen account or namespace name is enough to widen the match.
+- `traust-python-authentication-jwt-signature-unverified` (new
+  `python/authentication.yaml`) and
+  `traust-go-authentication-jwt-signature-unverified` (CWE-347): token
+  decoding with signature verification switched off, including the
+  conditional shape where an options dict is mutated under a test/debug
+  flag, the legacy `verify=False` keyword, the `none` algorithm, a Go key
+  function that returns no key, and `ParseUnverified` (MEDIUM: it has a
+  legitimate key-selection use).
+- `traust-python-input-validation-pickle-loads-taint` gained sinks
+  (`Unpickler(...).load()` including subclasses, `dill`, `jsonpickle`,
+  `shelve`), and `traust-python-input-validation-restricted-unpickler-inventory`
+  (INFO, LOW) inventories every `Unpickler` subclass that overrides
+  `find_class`. A restricted unpickler is still a deserialization site, so
+  a negative result must name it rather than report the class absent.
+- `traust-python-cryptography-secret-compare-not-constant-time`,
+  `traust-go-cryptography-secret-compare-not-constant-time` (CWE-208,
+  LOW): `==`/`!=` (and Go `bytes.Equal`) on token-, password-, digest-,
+  signature-, MAC- or API-key-named operands. Literal and nil comparisons
+  and metadata-named operands (`*_type`, `*_id`, `*_len`, …) are excluded.
+
+Engine note (v1.8): `metavariable-regex` is anchored at the start of the
+bound text, so a "contains" test needs a leading `.*` (`(?is).*\blike\b`),
+and it cannot sit directly under `pattern-either` — wrap each branch in
+its own `patterns:`.
+
 v1.3 (2026-07-20) added the **java tranche** (`java/`): 8 seed rules keyed to
 SEI CERT Oracle Coding Standard for Java rule IDs (`metadata.cert`; IDs cited
 by reference only — patterns and text original to this pack), motivated by
