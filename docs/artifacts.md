@@ -104,7 +104,7 @@ it is what keeps per-target detail out of the leadership views.
 - **Skill assets.** Templates, rule packs, seed lists — machinery useful to
   anyone. These stay in the skill directory (for example the fuzz-harness
   templates under `create-fuzzing/harnesses/_templates/` or the
-  `secure-code-audit/opengrep-rules/` pack).
+  opengrep rule pack, which ships inside traust-engine).
 
 **Deciding.** Ask what produced it. Machinery that would be useful to anyone is
 a skill asset. A file written about one audited target is findings-side. An

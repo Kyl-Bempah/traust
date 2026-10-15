@@ -528,7 +528,7 @@ When a local checkout exists **and** `opengrep` is on `PATH`, seed the applicati
 python3 -m traust.cli adapters opengrep <local-path> --out /tmp/<repo>-opengrep.json
 ```
 
-The wrapper runs the opengrep engine against an **explicitly pinned ruleset** — by default the **harness-authored pack** in [`opengrep-rules/`](opengrep-rules/) (our IP, no external restrictions, mined from the campaign's triage-ledger true positives and calibrated against audited repos — see `plans/opengrep-ruleset-plan.md` under the configured `progress-tracker` root). Rule packs remain a **swappable input**: pass `--rules <path|git-url@sha|p/pack>` to add or replace packs — e.g. the opengrep-rules fork as an internal-run supplement — and copy each pack's `license_note` from the output into `metadata.tools` so the report records what ran under which terms. `--config auto` is refused (registry auto-fetch has no per-pack license accounting — see [`docs/external-dependencies.md`](../../../docs/external-dependencies.md)). **Supplemental external packs apply automatically on a default run**: `$TRAUST_CONFIG_HOME/rule-pack-allowlist.yaml` lists enabled packs and, per pack, the exact rule ids permitted to emit — currently 15 of the 16 calibrated argus TLS/certificate-validation rules (~0.6 novel findings/repo, median 0 — 84% of repos see none; `go-crypto-tls-version` is held back as 29% of the tranche's load at an 82% novel rate, and the pack's other 624 rules never reach the report). Passing an explicit `--rules` disables that folding, so calibration runs stay clean. An unreachable supplemental pack is skipped and recorded in `supplemental_packs.skipped`, never a scan failure. The lane re-scores every enabled rule against the ~50% precision gate — see [`mine-ledger`](../../mine-ledger/SKILL.md).
+The wrapper runs the opengrep engine against an **explicitly pinned ruleset** — by default the **Traust-authored pack bundled in traust-engine** ([`traust_engine/data/secure-code-audit/opengrep-rules/`](https://github.com/traust-security/traust-engine/tree/main/src/traust_engine/data/secure-code-audit/opengrep-rules); the only copy, loaded automatically with no rule-pack argument or `locations` override; our IP, no external restrictions, mined from the campaign's triage-ledger true positives and calibrated against audited repos — see `plans/opengrep-ruleset-plan.md` under the configured `progress-tracker` root). Rule packs remain a **swappable input**: pass `--rules <path|git-url@sha|p/pack>` to add or replace packs — e.g. the opengrep-rules fork as an internal-run supplement — and copy each pack's `license_note` from the output into `metadata.tools` so the report records what ran under which terms. `--config auto` is refused (registry auto-fetch has no per-pack license accounting — see [`docs/external-dependencies.md`](../../../docs/external-dependencies.md)). **Supplemental external packs apply automatically on a default run**: `$TRAUST_CONFIG_HOME/rule-pack-allowlist.yaml` lists enabled packs and, per pack, the exact rule ids permitted to emit — currently 15 of the 16 calibrated argus TLS/certificate-validation rules (~0.6 novel findings/repo, median 0 — 84% of repos see none; `go-crypto-tls-version` is held back as 29% of the tranche's load at an 82% novel rate, and the pack's other 624 rules never reach the report). Passing an explicit `--rules` disables that folding, so calibration runs stay clean. An unreachable supplemental pack is skipped and recorded in `supplemental_packs.skipped`, never a scan failure. The lane re-scores every enabled rule against the ~50% precision gate — see [`mine-ledger`](../../mine-ledger/SKILL.md).
 
 **The model is the judge.** Each fact is a true statement about the code's *shape* (rule id, `file:line`, CWE, taint trace) — not a vulnerability. For every fact in an application-security class:
 
@@ -591,7 +591,7 @@ Usage rules:
 
 1. **Cite CERT rules by ID** (e.g. `IDS00-J`, `STR31-C`) in finding `description` text alongside the CWE — CERT IDs go in prose, never in `category` (the kebab-case vocabulary below is unchanged). Add the matching framework token to `metadata.framework` only when CERT rules were actually cited.
 2. **Reference by ID + independent paraphrase only.** The CERT standards are CMU-copyrighted with permission-based reuse: rule IDs, titles, and this repository's own wording are fine; verbatim rule bodies, tables, or compliant/noncompliant example code are not (see [`docs/external-dependencies.md`](../../../docs/external-dependencies.md); the `check-licensing` gate applies).
-3. **The Java opengrep tranche is CERT-seeded.** `opengrep-rules/java/` rules carry the motivating CERT ID in `metadata.cert`; judge and record their facts under the same promote/dismiss protocol as every other pre-scan fact. A CERT-seeded fact is still a fact, not a finding.
+3. **The Java opengrep tranche is CERT-seeded.** The pack's `java/` rules carry the motivating CERT ID in `metadata.cert`; judge and record their facts under the same promote/dismiss protocol as every other pre-scan fact. A CERT-seeded fact is still a fact, not a finding.
 4. This section adds review depth, not new report machinery: severity stays CVSS-driven, categories stay in the shared vocabulary, and no CERT-specific report section exists.
 
 ### OWASP Kubernetes Top 10 (Kubernetes & Operator Security)
@@ -1083,7 +1083,7 @@ python3 -m traust.cli adapters gitleaks --repo <local-path> --out /tmp/<repo>-gi
 ```
 
 The wrapper runs gitleaks with the **Traust-owned extension config**
-([`gitleaks-rules/gitleaks-default.toml`](gitleaks-rules/gitleaks-default.toml) —
+(the [`gitleaks-default.toml`](https://github.com/traust-security/traust-engine/tree/main/src/traust_engine/data/secure-code-audit/gitleaks-rules/gitleaks-default.toml) bundled in traust-engine, the only copy —
 upstream default rules plus `traust-*` portfolio detectors, including
 connection-string URLs with embedded credentials
 (`traust-dsn-url-credentials`: postgres/mysql/mongodb/amqp/redis DSNs in
@@ -1096,7 +1096,7 @@ evidence, quote **only a masked prefix** (first 4 chars + `…`) read from
 the checkout, never the full credential.
 
 When calibrating the bundled `traust-*` detectors, use the
-[negative fixture](gitleaks-rules/fixtures/secrets-fixture-negative.txt)
+[negative fixture](https://github.com/traust-security/traust-engine/tree/main/src/traust_engine/data/secure-code-audit/gitleaks-rules/fixtures/secrets-fixture-negative.txt)
 to check that templated passwords, masked examples, and credential-free
 URLs produce no detections. These are calibration inputs, not live secrets.
 
