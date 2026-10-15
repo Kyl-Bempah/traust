@@ -229,9 +229,9 @@ are executed, not what is reported.
    <subsystem>") over the highest-value subsystem (enforcement layer,
    execution boundary, or credential custody). Merge its output
    through the same triage bar as every other lane.
-5. **Review surfaces.** Check the six surfaces in
-   [`docs/review-surfaces.md`](../../../docs/review-surfaces.md) on every
-   audit, using the check that file defines for each:
+5. **Review surfaces.** Check the six surfaces in this skill's companion
+   [`review-surfaces.md`](review-surfaces.md) on every audit, using the
+   check that file defines for each:
    `credential-acceptance` (what else passes each verifier),
    `ownership-resolution` (owners matched by name or unescaped pattern),
    `security-flags` (every reader of a flag; the worst one sets
@@ -241,7 +241,9 @@ are executed, not what is reported.
    bytes are the stored bytes) and `scope-enforcement` (scope and step-up
    rules hold for every credential type and route). The file maps each
    surface to its `category` and CWEs; it is the single definition, so do
-   not restate it in prompts.
+   not restate it in prompts. The surface IDs come from the
+   `review_surface` enum in traust-contracts, and every report records its
+   answer for each in `review_surface_coverage` (below).
 
 ## Audit Passes (dual-pass default)
 
@@ -291,16 +293,17 @@ is a measured FN risk — emit an explicit `negative_results` entry:
 audit — <one-line reason>"`. Never let an unexamined surface read as
 clean by omission.
 
-**No threat model:** the six review surfaces
-([`docs/review-surfaces.md`](../../../docs/review-surfaces.md)) are the
-minimum coverage. Each one that applies ends the audit with a finding or
-a scoped `negative_results` entry, and one that does not apply gets a
-one-line entry saying so. A scoped, partial or budget-truncated audit
-records every surface it did not examine in
-`metadata.additional.coverage_gaps` as
-`{"tool": "review-surfaces", "system": "<surface>", "reason": "..."}`,
-so the gap stays visible to dashboards and the rescan router instead of
-reading as a clean result.
+**Review surfaces, with or without a threat model:** every report carries
+`review_surface_coverage`, one entry per review surface with status
+`finding`, `negative`, `not_applicable` or `not_assessed`
+([`review-surfaces.md` → Recording coverage](review-surfaces.md#recording-coverage)).
+A `negative` needs a `negative_results` entry whose `area` starts with the
+surface ID; a `not_assessed` surface (scoped, partial or budget-truncated
+audits) also goes in `metadata.additional.coverage_gaps` as
+`{"tool": "review-surfaces", "system": "<surface>", "reason": "..."}`.
+The schema requires all six and `reporting validate` checks each entry
+against the report, so a surface that was judged but not written down
+fails validation instead of reading as a clean result.
 
 ## Precision Gate
 
@@ -764,7 +767,7 @@ Determine which mechanism is doing the real isolation work, and record it as `bo
 - **`network_segmentation`** — per-tenant networks with default-deny between them. Look for per-tenant OVN networks/subnets, default-deny NetworkPolicy, mesh mTLS keyed on tenant identity. Strong as a supporting layer.
 - **`identity_segmentation`** — per-tenant identities bounded by deny-by-default authorization. Look for per-tenant ServiceAccounts/IAM roles, RBAC scoped to the tenant namespace, SubjectAccessReview or impersonation checks in the request path. Strong as a supporting layer.
 - **`containerization`** — tenants in separate containers/pods sharing a kernel. **Weak as a sole boundary**: one kernel or runtime bug spans tenants. When this is all that separates tenants, the compensating controls become mandatory — seccomp/SELinux/AppArmor profiles, sandboxed runtimes (gVisor/Kata), non-root, read-only rootfs, dropped capabilities, hardened node OS — and each *missing* control on a container-only boundary is a candidate finding.
-- **`data_segmentation`** — tenants share one datastore and separation is only per-tenant keys or `tenant_id` scoping. **Weakest**: correctness rests on every single query path. Look for row-level tenant filters, shared buckets with per-tenant prefixes, shared etcd/DB with logical partitioning — then audit key storage and every query for a missing tenant scope. For shared content-addressed or deduplicated stores, also check `stored-content-integrity` ([`docs/review-surfaces.md`](../../../docs/review-surfaces.md)): one corrupt object stored under a valid digest is served to every tenant that uploads the same digest.
+- **`data_segmentation`** — tenants share one datastore and separation is only per-tenant keys or `tenant_id` scoping. **Weakest**: correctness rests on every single query path. Look for row-level tenant filters, shared buckets with per-tenant prefixes, shared etcd/DB with logical partitioning — then audit key storage and every query for a missing tenant scope. For shared content-addressed or deduplicated stores, also check `stored-content-integrity` ([`review-surfaces.md`](review-surfaces.md)): one corrupt object stored under a valid digest is served to every tenant that uploads the same digest.
 
 #### Step 3 — Test the boundary against the five hardening parameters
 
@@ -1343,6 +1346,7 @@ and constraints. Do not restate the tables here — duplicated copies drift.
 Key profile obligations for this skill:
 - Set `metadata.audit_profile: "code"`.
 - Always emit `peach_isolation_review` (`applicable: false` + rationale for single-tenant).
+- Always emit `review_surface_coverage`: one entry per review surface ([`review-surfaces.md` → Recording coverage](review-surfaces.md#recording-coverage)). Required from traust 0.20.0; the validator checks every `finding_ids`, `negative` and `not_assessed` entry against the rest of the report.
 - Include `metadata.loc_breakdown` on all new reports.
 - Stamp `metadata.additional.repo_status` from `progress-tracker/metrics/repo-liveness.json` when present (`active | archived | moved | missing`, with `status_since`); absent from the artifact → `"unknown: not in liveness artifact"`. **Record only** — status never changes findings, severity, or scan depth: archived code that ships is exactly as exploitable as live code. Consumers read the artifact; do not re-query GitHub.
 - After validation, run python3 -m traust.cli corpus finding-identity fingerprint <report.json> --write.
@@ -1402,6 +1406,13 @@ These fields are how `traust_engine.corpus.resolver` distinguishes branch re-aud
 ### Report Validation
 
 After writing the JSON report, **you must validate it** before considering the report complete. **Do not move on to the next repository until the current report passes validation with 0 errors.**
+
+**Step 0 — Check review-surface coverage before validating.** For each of
+the six review surfaces, confirm `review_surface_coverage` has its entry
+and that the entry's evidence is in the report (the findings it names, the
+`negative_results` entry whose `area` starts with the surface ID, or the
+`coverage_gaps` entry). Write any surface you judged but did not record:
+the validator rejects a missing or unsupported entry.
 
 **Step 1 — Run the validator:**
 

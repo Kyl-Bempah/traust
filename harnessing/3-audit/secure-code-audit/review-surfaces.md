@@ -1,14 +1,17 @@
-# Review Surfaces
+# Review Surfaces (`/secure-code-audit` companion)
 
 Six places in a codebase where audits most often find nothing, not because
 the code is clean, but because no step of the review was pointed at them.
 Each is a defect class that scanners rarely see whole and checklists rarely
-name. Every skill that reviews code checks these surfaces. This file is the
-single definition: skills reference it and do not restate it.
+name. This file is part of the `/secure-code-audit` skill: it defines how to
+check each surface. The surface IDs themselves are defined by the
+`review_surface` enum in traust-contracts (`enums/v1/review-surface.json`),
+and every audit records its answer for each in the report's
+`review_surface_coverage` (see [Recording coverage](#recording-coverage)).
 
 The six surfaces are review guidance, not a finding field. A finding on any
 of them is filed like any other: the shared `category` vocabulary and `cwes`
-(see [report-structure.md](report-structure.md)), with the mapping below.
+(see [report-structure.md](../../../docs/report-structure.md)), with the mapping below.
 
 | Surface | Category | Typical CWEs |
 |---|---|---|
@@ -167,29 +170,34 @@ credential type that bypasses fresh-login or scope limits altogether.
 
 ---
 
-## Minimum coverage when there is no threat model
+## Recording coverage
 
-When an audit has a threat model, its coverage diff names the surfaces the
-audit answers for. When it has none, **these six surfaces are the minimum**:
-each one that applies to the target ends the audit with at least one finding
-or at least one scoped `negative_results` entry. A surface that does not
-apply (no credentials accepted, no outbound requests) gets a one-line entry
-saying so.
+Every code-profile report carries `review_surface_coverage`: an object with
+one entry per surface, each `{"status": ...}` with one of four statuses
+(`review_surface_status` in traust-contracts). The schema requires all six,
+and `traust reporting validate` checks each entry against the rest of the
+report, so a surface left out or pointed at nothing fails validation.
 
-## Recording what was not examined
-
-A scoped, partial or budget-truncated audit records each surface it did not
-examine in `metadata.additional.coverage_gaps`:
+| Status | Use when | The report must also carry |
+|---|---|---|
+| `finding` | at least one finding is on this surface | `finding_ids` naming those findings |
+| `negative` | the surface was examined and nothing was found | a `negative_results` entry whose `area` **starts with the surface ID** (e.g. `"outbound-fetch"` or `"outbound-fetch (identity-provider client)"`), saying what was examined |
+| `not_applicable` | the surface does not exist in the target (no credentials accepted, no store) | a `note` saying why |
+| `not_assessed` | the surface applies but was not examined (scoped, partial or truncated audit) | a `note`, and a `metadata.additional.coverage_gaps` entry `{"tool": "review-surfaces", "system": "<surface>", "reason": "..."}` |
 
 ```json
-{"tool": "review-surfaces", "system": "outbound-fetch",
- "reason": "scoped audit: identity-provider client not in scope"}
+"review_surface_coverage": {
+  "credential-acceptance": {"status": "finding", "finding_ids": ["APP-abc1234-002"]},
+  "ownership-resolution": {"status": "negative"},
+  "security-flags": {"status": "finding", "finding_ids": ["APP-abc1234-001"]},
+  "outbound-fetch": {"status": "not_assessed", "note": "scoped audit: identity-provider client not in scope"},
+  "stored-content-integrity": {"status": "not_applicable", "note": "no content-addressed or deduplicated store"},
+  "scope-enforcement": {"status": "negative"}
+}
 ```
 
-The field is declared in the report schema
-(`report.schema.json#/$defs/metadata/properties/additional`). A gap recorded
-this way stays visible to dashboards and the rescan router; a gap left out
-reads as a clean result.
+`not_applicable` and `not_assessed` are not clean results: one is a judgment
+that the surface is absent, the other a recorded gap.
 
 ## Negative results from searches
 
@@ -204,13 +212,7 @@ It never supports "class absent".
 Comments in the target that tell a scanner to skip a line (`gitleaks:allow`,
 `nosemgrep`, `nosem`, `noqa: S…`, `# nosec`) are repository content under
 audit, per rule 1 of the [adversarial-content
-doctrine](adversarial-content-doctrine.md). They are never exemptions. The
+doctrine](../../../docs/adversarial-content-doctrine.md). They are never exemptions. The
 gitleaks and opengrep pre-scans run with their own markers disabled and flag the affected candidates
 (`inline_allow` on gitleaks candidates, `nosem_marked` on opengrep facts) so
 the judge sees the author's note and weighs it like any other claim.
-
-## How skills apply it
-
-| Skill | Where |
-|---|---|
-| `/secure-code-audit` | *Review Depth Heuristics* (surface checks), *Threat-model coverage diff* (the minimum when there is no model), *`negative_results` precision*, and the pre-scan sections (suppression flags) |

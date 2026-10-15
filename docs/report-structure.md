@@ -71,6 +71,7 @@ projections.
 | `dependency_audit` | `prose` + `entries[]` (`package`, `version`, `status`, `notes`). |
 | `negative_results` | Areas verified clean: `area`, `result`, optional `files`. |
 | `asvs_coverage` | ASVS chapter coverage entries. |
+| `review_surface_coverage` | One entry per review surface (the `review_surface` enum in traust-contracts), each with a status from `review_surface_status`; required on `code`-profile audits from traust 0.20.0 — see deltas. |
 | `scanner_correlation` | Scanner tool results, including the judge decisions the rule-mining lane consumes. |
 | `peach_isolation_review` | Always emitted on `code` and `container` profiles — see deltas. |
 | `disposition_summary` | Cumulative reports only: counts per validity and resolution state, derived from the ledger. |
@@ -106,6 +107,12 @@ projections.
   archived-but-shipping components instead of misreading them as
   unremediated backlog. The container profile records the *source* repo's
   status as `source_repo_status`.
+- `review_surface_coverage` is **always emitted** (required from traust
+  0.20.0): one entry per review surface. `finding` entries name existing
+  findings in `finding_ids`, `negative` entries have a `negative_results`
+  entry whose `area` starts with the surface ID, and `not_assessed` entries
+  have a `coverage_gaps` entry with `tool: "review-surfaces"`. The
+  validator checks each against the report.
 - `peach_isolation_review` is **always emitted**: `{"applicable": false,
   "rationale": …}` for single-tenant components; full `interfaces[]` when
   multi-tenant. `peach_references` on findings only when applicable.

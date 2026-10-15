@@ -2,6 +2,27 @@
 
 All notable changes to Traust are documented here.
 
+## [0.20.0]
+
+- **`/secure-code-audit` records review-surface coverage as data.** Every
+  code-profile report carries `review_surface_coverage` (traust-contracts
+  0.56.0), one entry per review surface: `finding` with `finding_ids`,
+  `negative` with a `negative_results` entry whose `area` starts with the
+  surface ID, `not_applicable` with a note, or `not_assessed` with a note
+  and a `coverage_gaps` entry. A new pre-validation step has the auditor
+  check the record. traust-engine 0.25.0 makes it required for code-profile
+  audits from this release, and checks every entry against the rest of the
+  report. A surface judged but left unrecorded now fails validation instead
+  of reading as covered.
+- **The surface checks live in the skill.** `docs/review-surfaces.md` moves
+  to `harnessing/3-audit/secure-code-audit/review-surfaces.md`, so
+  methodology stays out of the adopter-facing `docs/`. The new "Recording
+  coverage" section replaces the minimum-coverage and coverage-gap sections.
+  `docs/report-structure.md` documents the field.
+- Pins traust-engine 0.25.0 (`bc14d6a`, traust-engine#27). Its version gates
+  now pick the numbering from the audit date, so they hold across the
+  2026-09-10 version reset.
+
 ## [0.19.1]
 
 - **Pins traust-contracts 0.56.0** (`cb8bba8`), with traust-ledger and
