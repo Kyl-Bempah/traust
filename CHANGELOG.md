@@ -2,6 +2,14 @@
 
 All notable changes to Traust are documented here.
 
+## [0.18.1]
+
+- **Pins traust-engine 0.24.0:** `traust adapters opengrep` no longer
+  honours the scanned target's own `nosemgrep` / `nosem` comments. A fact
+  on such a line is reported with `nosem_marked: true` instead of being
+  dropped, the same treatment `traust adapters gitleaks` gives
+  `gitleaks:allow` (`inline_allow`).
+
 ## [0.18.0]
 
 - **One copy of each rule pack, loaded with no configuration.** The opengrep
