@@ -2,6 +2,20 @@
 
 All notable changes to Traust are documented here.
 
+## [0.17.1]
+
+- **Pins traust-contracts 0.55.0, traust-ledger and traust-engine 0.22.1.**
+  - traust-contracts 0.55.0 types the run records under report
+    `metadata.additional` (traust-contracts#42). A report that writes one of
+    them in another shape, such as `null` inside `model_routing`, now fails
+    `traust reporting validate`. It also brings storage revision 2 from
+    0.54.0.
+  - traust-engine 0.22.1: `traust registry models stamp` leaves out
+    `floor` for a role missing from the registry instead of writing
+    `null`; the gitleaks adapter (0.22.0) no longer honours the scanned
+    target's own `gitleaks:allow` comments and flags those candidates
+    `inline_allow`.
+
 ## [0.17.0]
 
 - **Rule pack v1.8: authentication, ownership and crypto-hygiene
