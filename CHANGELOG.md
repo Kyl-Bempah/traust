@@ -2,6 +2,18 @@
 
 All notable changes to Traust are documented here.
 
+## [0.19.1]
+
+- **Pins traust-contracts 0.56.0** (`cb8bba8`), with traust-ledger and
+  traust-engine re-pinned to match. Reports may now carry the declared
+  `review_surface_coverage` record. `traust reporting validate` checks its
+  shape (all six review surfaces, valid statuses, `finding_ids` / `note`
+  where required). The field stays optional until `/secure-code-audit`
+  produces it. Storage is at revision 3 (`report.review_surface_coverage`):
+  existing storage databases need `Store.migrate()`.
+- `docs/storage-v1-ddl-model.md` is regenerated from the pinned contracts
+  DDL. It had fallen behind earlier storage releases (43 → 49 tables).
+
 ## [0.19.0]
 
 - **New `docs/review-surfaces.md`: six code surfaces every review checks.**
