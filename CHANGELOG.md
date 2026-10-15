@@ -2,6 +2,27 @@
 
 All notable changes to Traust are documented here.
 
+## [0.19.0]
+
+- **New `docs/review-surfaces.md`: six code surfaces every review checks.**
+  These are `credential-acceptance`, `ownership-resolution`,
+  `security-flags`, `outbound-fetch`, `stored-content-integrity` and
+  `scope-enforcement`, each with the check it requires, its `category` and
+  CWEs, and what a scoped negative result looks like. It is the single
+  definition; skills reference it.
+- **`/secure-code-audit`:**
+  - Review-depth heuristic 5 checks the six surfaces on every audit.
+  - With no threat model, they are the minimum coverage: each applicable
+    surface ends with a finding or a scoped negative result.
+  - A scoped or partial audit records surfaces it skipped in
+    `metadata.additional.coverage_gaps` (`tool: "review-surfaces"`).
+  - A search-based negative result quotes the exact pattern searched.
+  - PEACH data segmentation adds the stored-content integrity check.
+- Scanner suppression comments in the target (`gitleaks:allow`,
+  `nosemgrep`/`nosem`, `# nosec`) are named as repository content, never
+  exemptions, in the adversarial-content doctrine and the skill. The
+  pre-scans already disable them and flag the candidates.
+
 ## [0.18.1]
 
 - **Pins traust-engine 0.24.0:** `traust adapters opengrep` no longer

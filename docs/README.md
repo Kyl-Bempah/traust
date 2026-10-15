@@ -1,6 +1,6 @@
 # Docs
 
-A reader's map to the 34 documents in this directory. Three audiences — **operators** setting up and running the workflow engine, **analysts** reading and acting on its output, and **contributors** changing the workflow engine — are grouped separately below. Reference material shared across all three follows.
+A reader's map to the 35 documents in this directory. Three audiences — **operators** setting up and running the workflow engine, **analysts** reading and acting on its output, and **contributors** changing the workflow engine — are grouped separately below. Reference material shared across all three follows.
 
 ---
 
@@ -45,6 +45,7 @@ For security engineers triaging findings, verifying exploitability, and tracking
 | [risk-rating-methodology.md](risk-rating-methodology.md) | How per-finding scores become portfolio risk metrics |
 | [reachability.md](reachability.md) | Reachability engines, what each may conclude, and per-language coverage |
 | [adversarial-content-doctrine.md](adversarial-content-doctrine.md) | The standing rule for any agent reading content it did not write (prompt-injection defence) |
+| [review-surfaces.md](review-surfaces.md) | The six code surfaces every review must check, how to check each, and how to record what was not examined |
 
 ---
 
