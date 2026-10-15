@@ -2,6 +2,26 @@
 
 All notable changes to Traust are documented here.
 
+## [0.18.0]
+
+- **One copy of each rule pack, loaded with no configuration.** The opengrep
+  rule pack and the gitleaks config live only in traust-engine
+  (`traust_engine/data/secure-code-audit/`), which is what every default run
+  already loaded. The harness copies under
+  `harnessing/3-audit/secure-code-audit/` are deleted. Rule pack v1.8
+  (from 0.17.0) only reached default runs once traust-engine 0.23.0 carried
+  it, so this release pins traust-engine 0.23.0 (`80bf320`).
+- New docs gate `single rule pack`: fails on a rule-pack directory in this
+  repo, or on a skill, doc or config that points at the removed copies.
+- New `tests/test_default_rule_packs.py`: with the adopter-style fixture
+  config (no rule-pack location set), `traust adapters opengrep` reports a
+  v1.8 rule and `traust adapters gitleaks` reports a Traust detector. Not
+  marked `integration`, so the pre-push hook runs them wherever the scanners
+  are installed.
+- `/secure-code-audit`, `/mine-ledger` and the docs point at the bundled
+  packs. Rule promotion from `/mine-ledger` drafts is a traust-engine PR,
+  followed by the traust engine-pin bump.
+
 ## [0.17.1]
 
 - **Pins traust-contracts 0.55.0, traust-ledger and traust-engine 0.22.1.**

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from traust_engine.assets import default_rule_pack_dir
 
 from traust.paths import skill_dir
 
@@ -159,7 +160,7 @@ def test_verify_pass_and_fail(tmp_path):
 @pytest.mark.skipif(not HAVE_OPENGREP, reason="opengrep not on PATH")
 def test_promoted_codecov_rule_calibrates():
     """The pack's first regression rule keeps firing on its fixture."""
-    pack = _ROOT / "harnessing/3-audit/secure-code-audit/opengrep-rules/bash"
+    pack = default_rule_pack_dir() / "bash"
     proc = subprocess.run(
         [
             "opengrep",
