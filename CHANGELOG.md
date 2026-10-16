@@ -2,6 +2,13 @@
 
 All notable changes to Traust are documented here.
 
+## [0.23.1]
+
+- **`render-narrate` escalates to Sonnet 5.5.** `claude-sonnet-5-5` now comes
+  before `claude-sonnet-5` in its approved list, so a `sonnet-class`
+  escalation resolves to Sonnet 5.5, as `fact-judge` already does. Its floor
+  model (Haiku 5.5) is unchanged.
+
 ## [0.23.0]
 
 - **`fact-judge` prefers Sonnet 5.5** (`claude-sonnet-5-5` first, then
