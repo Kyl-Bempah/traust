@@ -384,6 +384,18 @@ no eval, mktemp used)" is valid; "no scriptlet issues" is not. A
 suppression produced by a Precision Gate rule cites the gate and its
 evidence.
 
+### Review surfaces
+
+Check the six surfaces in
+[`review-surfaces.md`](../secure-code-audit/review-surfaces.md) against the
+prepared source tree, weighting the downstream delta: patches carried in
+dist-git are first-party code, and the spec's shipped config files and
+`%configure` flags set the defaults that `security-flags` asks about.
+Record each answer in `review_surface_coverage`
+([Recording coverage](../secure-code-audit/review-surfaces.md#recording-coverage)),
+with the same evidence rules as code audits: a `negative` needs a matching
+`negative_results` entry, and a `not_assessed` needs a `coverage_gaps` entry.
+
 ---
 
 ## Security Assessment Framework
@@ -630,6 +642,7 @@ Key profile obligations for this skill:
 - Set `metadata.audit_profile: "rpm"`.
 - `metadata.repository` = dist-git URL; upstream Source0/Version/Release/patches under `metadata.additional`.
 - `category` uses the `RPM01`–`RPM10` packaging taxonomy; digit-leading slugs take the `RPM_` prefix.
+- Emit `review_surface_coverage`, one entry per review surface (see *Review surfaces* above). Required from traust 0.21.0; the validator checks every entry against the rest of the report.
 - After validation, run python3 -m traust.cli corpus finding-identity fingerprint <report.json> --write.
 
 ### Report Validation

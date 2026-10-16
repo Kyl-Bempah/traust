@@ -355,6 +355,16 @@ technique fits — it is part of the schema and `/attack-coverage` reads
 it as modeled coverage. An empty array is valid when none fits; never
 guess. IDs are validated against the harness's pinned ATT&CK table.
 
+**Review-surface tags.** New emissions tag each threat and each entry
+point with `review_surfaces`: the surfaces from
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md)
+it sits on. For example, a token verifier entry point is
+`["credential-acceptance"]`, and a webhook that fetches a user-supplied URL
+is `["outbound-fetch"]`. Leave the field out when none applies; never pad
+it. The audit's threat-model coverage diff reads these tags to map
+modelled threats to its `review_surface_coverage` record, so an untagged
+threat on a surface goes unmapped.
+
 **Findings-tree placement (wiring contract, 2026-07-31).** The checkout
 copy alone is invisible to every downstream consumer — `/secure-code-audit`
 (coverage diff), `/vuln-scan`, `/triage`, `/threat-register`, and
