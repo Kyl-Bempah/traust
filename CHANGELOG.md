@@ -2,6 +2,24 @@
 
 All notable changes to Traust are documented here.
 
+## [0.20.1]
+
+- **Pins traust-contracts 0.57.0** (`4e900e7`), with traust-ledger and
+  traust-engine re-pinned to match.
+  - Verification and vuln-scan reports may now carry a declared
+    `review_surface_coverage` record, and `review_surface_status` gains
+    `out_of_scope`. Threat models may tag threats and entry points with
+    `review_surfaces`. `traust reporting validate` checks their shapes. The
+    fields stay optional until the skills produce them.
+  - Storage is at revision 4 (`verification.review_surface_coverage`,
+    `threat.review_surfaces`), so existing storage databases need
+    `Store.migrate()`.
+- **Pins traust-engine 0.25.1.** `traust reporting validate` now detects
+  `*-remediation-verification.json`, `*-refuted-register.json` and
+  `*-priv-profile.json` by filename. Until now each of them failed against
+  the audit-report schema.
+- `docs/storage-v1-ddl-model.md` is regenerated from the pinned contracts DDL.
+
 ## [0.20.0]
 
 - **`/secure-code-audit` records review-surface coverage as data.** Every
