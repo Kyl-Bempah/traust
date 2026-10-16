@@ -2,6 +2,37 @@
 
 All notable changes to Traust are documented here.
 
+## [0.26.0]
+
+- **The config-matrix pre-scan expands Python settings** (new
+  `python-settings` tier in `expand_config_matrix.py`).
+  - **What it reads:** literals in settings modules (`settings*.py`,
+    `config*.py`, `conf.py`, `configuration*.py`) and in settings classes
+    (names ending `Settings`, `Config` or `Configuration`, or extending
+    pydantic's `BaseSettings`). Files are parsed with `ast`, never imported
+    or run. Test files, `conftest.py` and test directories are skipped.
+  - **Sinks:** each triple's sink lists the setting's readers
+    (`settings.X`, `config.X`, `app.config["X"]`, `config.get("X")`,
+    `getattr(settings, "X")`), so the judge can rate a flag by its worst
+    reader.
+  - **Classification:** by the setting's name, so module-path values such
+    as `rbac.urls` no longer read as auth. A value marks only a DSN or a
+    bind-all address (`0.0.0.0`). Test toggles (`TESTING`), CSRF and
+    signature-verification switches are now judged. A debug toggle is weak
+    when it's on.
+  - **Hardcoded credentials:** a secret-shaped name, or a URL with an
+    embedded password, is a judged `weak_default`. It is reported as
+    `<hardcoded literal, N chars>` or with the password masked, marked
+    `literal_redacted`, and never copied into the artifact.
+  - **Unparsed modules:** a settings module that doesn't parse is a
+    `coverage_gap`.
+  - The new class words (`testing`, `csrf`, `skip_auth`,
+    `verify_signature`) also apply to the other tiers. On five real Python
+    repos, the existing tiers' triples were unchanged.
+- `/secure-code-audit`'s config-matrix section documents the tier. An
+  `unresolved` sink means no reader in this tree, not an unused setting,
+  because frameworks read most of them.
+
 ## [0.25.0]
 
 - **`/threat-model` bootstrap maps the review surfaces.**

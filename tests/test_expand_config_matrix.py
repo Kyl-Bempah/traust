@@ -297,3 +297,146 @@ def test_cli_writes_artifact(tmp_path, helm_repo):
     assert data["artifact"] == "config-matrix"
     assert data["stats"]["total"] > 0
     assert "to judge" in proc.stdout
+
+
+# --------------------------------------------------------------------------
+# python settings: modules and settings classes (parsed, never imported)
+# --------------------------------------------------------------------------
+
+# Credential-shaped fixture values are built at runtime, so no literal that
+# looks like a secret is committed.
+FAKE_KEY = "k" * 24
+FAKE_PW = "p" * 12
+
+
+@pytest.fixture
+def settings_repo(tmp_path):
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "config.py").write_text(
+        "import os\n"
+        "class Config:\n"
+        "    DEBUG = False\n"
+        f"    SECRET_KEY = '{FAKE_KEY}'\n"
+        "    WTF_CSRF_ENABLED = True\n"
+        "    SESSION_COOKIE_NAME = 'session'\n"
+        "class TestingConfig(Config):\n"
+        "    TESTING = True\n"
+        "    WTF_CSRF_ENABLED = False\n"
+        "class ProductionConfig(Config):\n"
+        "    API_TOKEN = os.environ.get('API_TOKEN')\n"
+    )
+    (app / "settings.py").write_text(
+        "DEBUG = True\n"
+        "ALLOWED_HOSTS = '*'\n"
+        f"DATABASE_URL = 'postgres://app:{FAKE_PW}@db/app'\n"
+        "_PRIVATE = 1\n"
+        "lower_case = 'ignored'\n"
+    )
+    (app / "models.py").write_text(
+        "from pydantic_settings import BaseSettings\n"
+        "class AppSettings(BaseSettings):\n"
+        "    verify_signature: bool = False\n"
+        "    region: str = 'us-east-1'\n"
+        "class Widget:\n"
+        "    DEBUG = True\n"
+    )
+    (app / "views.py").write_text(
+        "from flask import current_app\n"
+        "def index():\n"
+        "    if current_app.config['DEBUG']:\n"
+        "        return 'debug'\n"
+        "    return config.get('WTF_CSRF_ENABLED')\n"
+    )
+    return tmp_path
+
+
+def _settings(result):
+    return [t for t in result["triples"] if t["source"]["system"] == "python-settings"]
+
+
+def test_settings_classes_and_modules_become_triples(settings_repo):
+    keys = {t["key"] for t in _settings(_expand(settings_repo))}
+    assert {
+        "Config.DEBUG",
+        "Config.SECRET_KEY",
+        "TestingConfig.TESTING",
+        "TestingConfig.WTF_CSRF_ENABLED",
+        "DEBUG",
+        "DATABASE_URL",
+        "AppSettings.verify_signature",
+    } <= keys
+    # not settings: a non-settings class, private and lower-case module names
+    assert "Widget.DEBUG" not in keys
+    assert "_PRIVATE" not in keys and "lower_case" not in keys
+    # an env read is left to the env-chain tier
+    assert "ProductionConfig.API_TOKEN" not in keys
+
+
+def test_security_toggles_are_judged(settings_repo):
+    by = {t["key"]: t for t in _settings(_expand(settings_repo))}
+    for key in ("TestingConfig.TESTING", "TestingConfig.WTF_CSRF_ENABLED", "DEBUG"):
+        assert by[key]["judgement_required"], key
+    assert by["TestingConfig.WTF_CSRF_ENABLED"].get("weak_default")  # False
+    assert by["AppSettings.verify_signature"]["judgement_required"]
+    assert not by["AppSettings.region"]["judgement_required"]
+
+
+def test_hardcoded_secrets_are_weak_defaults_and_never_copied(settings_repo):
+    result = _expand(settings_repo)
+    by = {t["key"]: t for t in _settings(result)}
+    key = by["Config.SECRET_KEY"]
+    assert key["literal_redacted"] and key["weak_default"] and key["judgement_required"]
+    assert key["effective_default"] == f"<hardcoded literal, {len(FAKE_KEY)} chars>"
+    dsn = by["DATABASE_URL"]
+    assert (
+        dsn["literal_redacted"] and dsn["effective_default"] == "postgres://app:<redacted>@db/app"
+    )
+    blob = json.dumps(result)
+    assert FAKE_KEY not in blob and FAKE_PW not in blob
+
+
+def test_sinks_list_the_readers(settings_repo):
+    by = {t["key"]: t for t in _settings(_expand(settings_repo))}
+    sink = by["DEBUG"]["sink"]
+    assert sink["status"] == "readers" and sink["count"] >= 1
+    assert {"path": "app/views.py", "line": 3} in sink["sites"]
+    assert by["TestingConfig.WTF_CSRF_ENABLED"]["sink"]["status"] == "readers"
+    assert by["Config.SESSION_COOKIE_NAME"]["sink"]["status"] == "unresolved"
+
+
+def test_settings_files_are_parsed_not_imported(tmp_path):
+    marker = tmp_path / "imported"
+    (tmp_path / "settings.py").write_text(f"open({str(marker)!r}, 'w').write('x')\nDEBUG = True\n")
+    result = _expand(tmp_path)
+    assert not marker.exists()
+    assert any(t["key"] == "DEBUG" for t in _settings(result))
+
+
+def test_unparseable_settings_module_is_a_coverage_gap(tmp_path):
+    (tmp_path / "settings.py").write_text("DEBUG = (\n")
+    gaps = _expand(tmp_path)["coverage_gaps"]
+    assert any(g["system"] == "python-settings" and "settings.py" in g["paths"] for g in gaps)
+
+
+def test_settings_in_test_files_are_skipped(tmp_path):
+    (tmp_path / "test_settings.py").write_text("DEBUG = True\n")
+    (tmp_path / "conftest.py").write_text("class TestConfig:\n    DEBUG = True\n")
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "config.py").write_text("class Config:\n    DEBUG = True\n")
+    assert _settings(_expand(tmp_path)) == []
+
+
+def test_settings_are_classified_by_name_not_by_a_module_path_value(tmp_path):
+    (tmp_path / "settings.py").write_text(
+        "ROOT_URLCONF = 'rbac.urls'\nDEBUG = False\nDEBUG_TOOLBAR = True\n"
+        "CACHE_URL = 'redis://cache:6379/0'\n"
+        "METRICS_EXPORT_ADDRESS = '0.0.0.0'\n"
+    )
+    by = {t["key"]: t for t in _settings(_expand(tmp_path))}
+    assert not by["ROOT_URLCONF"]["judgement_required"]
+    assert by["DEBUG"]["judgement_required"] and not by["DEBUG"].get("weak_default")
+    assert by["DEBUG_TOOLBAR"].get("weak_default")  # a debug toggle ON is weak
+    assert by["CACHE_URL"]["class"] == "dsn"
+    bind = by["METRICS_EXPORT_ADDRESS"]
+    assert bind["class"] == "listener" and bind.get("weak_default")
