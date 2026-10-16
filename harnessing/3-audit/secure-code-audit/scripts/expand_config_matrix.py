@@ -117,7 +117,7 @@ CLASS_PATTERNS = [
             r"(auth|anonymous|no[_-]?login|allow[_-]?guest|rbac|"
             r"authoriz|authentic|oidc|oauth|token[_-]?(auth|required)|"
             r"api[_-]?key|basic[_-]?auth|require[_-]?(auth|login)|csrf|"
-            r"skip[_-]?auth|verify[_-]?signature|signature[_-]?verif)",
+            r"skip[_-]?auth|verify\w*signature|signature\w*verif)",
             re.I,
         ),
     ),
@@ -125,7 +125,8 @@ CLASS_PATTERNS = [
         "secret",
         re.compile(
             r"(password|passwd|secret|credential|private[_-]?key|"
-            r"access[_-]?key|client[_-]?secret)",
+            r"access[_-]?key|client[_-]?secret|signing[_-]?key|encryption[_-]?key|"
+            r"hmac[_-]?key|(?<![a-z])salt(?![a-z]))",
             re.I,
         ),
     ),
@@ -238,17 +239,78 @@ def _line_of(text: str, needle: str) -> int | None:
     return None
 
 
+#: last-segment name endings that hold a credential
+_CRED_SUFFIXES = ("key", "token", "salt", "secret", "password", "passwd")
+#: ...except these (compared without _ and -), which name a non-secret value
+_NOT_SECRET_NAMES = {
+    "primarykey",
+    "foreignkey",
+    "publickey",
+    "sortkey",
+    "partitionkey",
+    "cachekey",
+    "idempotencykey",
+}
+#: user:password@ in a URL literal (a DSN with an embedded credential)
+URL_USERINFO_RX = re.compile(
+    r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<user>[^:/@\s]*):(?P<pw>[^@/\s]+)@", re.I
+)
+
+
+def _credential_name(key) -> bool:
+    """A key whose last segment ends in a credential word at a word boundary:
+    SIGNING_KEY, apiToken, session-secret; not monkey or public_key."""
+    seg = re.split(r"[./]", str(key))[-1]
+    low = seg.lower()
+    if re.sub(r"[_-]", "", low) in _NOT_SECRET_NAMES:
+        return False
+    for suffix in _CRED_SUFFIXES:
+        if low == suffix:
+            return True
+        if low.endswith(suffix) and len(seg) > len(suffix):
+            before, first = seg[-len(suffix) - 1], seg[-len(suffix)]
+            if before in "_-" or (first.isupper() and before.islower()):
+                return True
+    return False
+
+
+def _redact(key, value):
+    """(shown value, redacted?): a credential in a default is never copied out.
+
+    A literal under a secret-class or credential-shaped name is replaced by
+    its length; a URL's embedded password is masked. Templated or
+    environment-reference values (`${X}`, `{{ .Values.x }}`) are not
+    literals and are left alone."""
+    if not isinstance(value, str) or not value or "${" in value or "{{" in value:
+        return value, False
+    if classify(key, "")[0] == "secret" or _credential_name(key):
+        return f"<hardcoded literal, {len(value)} chars>", True
+    masked, n = URL_USERINFO_RX.subn(r"\g<scheme>\g<user>:<redacted>@", value)
+    return (masked, True) if n else (value, False)
+
+
 def make_triple(key, value, system, path, line, sink=None):
-    cls, relevant = classify(key, value)
+    shown, redacted = _redact(key, value)
+    cls, relevant = classify(key, "" if redacted else value)
+    if redacted and not relevant:
+        cls, relevant = "secret", True
+    if redacted and isinstance(sink, dict) and isinstance(sink.get("expr"), str):
+        # the consumption expression quotes the literal too
+        sink = {**sink, "expr": sink["expr"].replace(value, str(shown))}
     t = {
         "key": str(key),
-        "effective_default": "" if value is None else str(value),
+        "effective_default": "" if shown is None else str(shown),
         "source": {"system": system, "path": path, "line": line},
         "sink": sink or {"status": "unresolved"},
         "class": cls,
         "judgement_required": relevant,
     }
-    if relevant and is_weak(value):
+    if redacted:
+        # A hardcoded credential default is a weak default, and judged.
+        t["literal_redacted"] = True
+        t["weak_default"] = True
+        t["judgement_required"] = True
+    elif relevant and is_weak(value):
         t["weak_default"] = True
     return t
 
@@ -621,22 +683,6 @@ def _python_readers(repo: Path) -> dict[str, list[dict]]:
     return index
 
 
-#: user:password@ in a URL literal (a DSN with an embedded credential)
-URL_USERINFO_RX = re.compile(
-    r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<user>[^:/@\s]*):(?P<pw>[^@/\s]+)@", re.I
-)
-
-
-def _redact(name: str, value):
-    """(shown value, redacted?) — a credential in a default is never copied out."""
-    if not isinstance(value, str) or not value:
-        return value, False
-    if classify(name, "")[0] == "secret":
-        return f"<hardcoded literal, {len(value)} chars>", True
-    masked, n = URL_USERINFO_RX.subn(r"\g<scheme>\g<user>:<redacted>@", value)
-    return (masked, True) if n else (value, False)
-
-
 _DSN_RX = dict(CLASS_PATTERNS)["dsn"]
 _BIND_ALL_RX = re.compile(r"^(0\.0\.0\.0|::|\[::\])(:\d+)?$")
 _TRUTHY = {"true", "1", "yes", "on"}
@@ -666,23 +712,19 @@ def _weak_setting(cls: str, value) -> bool:
 
 
 def _settings_triple(key, name, value, rel, line, readers):
-    shown, redacted = _redact(name, value)
-    cls, relevant = _classify_setting(name, value)
     sites = readers.get(name, [])
     sink = (
         {"status": "readers", "sites": sites[:10], "count": len(sites)}
         if sites
         else {"status": "unresolved"}
     )
-    t = make_triple(key, shown, "python-settings", rel, line, sink=sink)
+    t = make_triple(key, value, "python-settings", rel, line, sink=sink)
+    if t.get("literal_redacted"):
+        return t
+    cls, relevant = _classify_setting(name, value)
     t["class"], t["judgement_required"] = cls, relevant
     t.pop("weak_default", None)
-    if redacted:
-        # A hardcoded credential default is a weak default, and judged.
-        t["literal_redacted"] = True
-        t["weak_default"] = True
-        t["judgement_required"] = True
-    elif relevant and _weak_setting(cls, value):
+    if relevant and _weak_setting(cls, value):
         t["weak_default"] = True
     return t
 
