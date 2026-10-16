@@ -20,8 +20,8 @@ All notable changes to Traust are documented here.
     `claude-haiku-5-5` ($0.10/$0.50 for prompts up to 100k tokens). Older
     entries stay so past runs keep a price.
   - **`claude-sonnet-5` corrected from $3/$15 to $2/$10.** Its launch price
-    became the standard price, so spend recorded against Sonnet 5 was
-    overstated by a third and drops on the next dashboard rebuild.
+    became the standard price. Spend priced from the registry for Sonnet 5
+    was overstated by half, and drops by a third once recomputed.
   - The `claude-opus-4-6` note no longer calls its price empirical; it is on
     the published card.
 
