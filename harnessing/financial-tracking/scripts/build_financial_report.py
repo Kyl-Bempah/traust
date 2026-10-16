@@ -148,7 +148,13 @@ def detect_bu(rec: dict, maps: dict) -> str | None:
     return best
 
 
-def collect_bu(dirs: list[Path], maps: dict, month: str | None, valid_skills: set[str]) -> dict:
+def collect_bu(
+    dirs: list[Path],
+    maps: dict,
+    month: str | None,
+    valid_skills: set[str],
+    thresholds: dict[str, int] | None = None,
+) -> dict:
     """-> {date: {bu: {skill: {model: agg}}}}. Walks each session in
     order tracking BOTH the active skill and the active BU, the same
     running-attribution model Phase 0 uses for skills alone."""
@@ -195,10 +201,19 @@ def collect_bu(dirs: list[Path], maps: dict, month: str | None, valid_skills: se
                     if not ts or (month and not ts.startswith(month)):
                         continue
                     a = agg[ts][bu][skill][model]
-                    for k in asp.TOKEN_KEYS:
-                        a[k] += usage.get(k) or 0
+                    # long-prompt requests are split out per request
+                    css.add_usage(a, usage, (thresholds or {}).get(model))
                     a["messages"] += 1
     return agg
+
+
+def model_registry_thresholds(reg) -> dict[str, int]:
+    """Long-prompt thresholds from a registry, or none when it is unavailable."""
+    if reg is None:
+        return {}
+    from traust_engine.registry.models import long_prompt_thresholds
+
+    return long_prompt_thresholds(reg)
 
 
 def cost_of(agg_leaf: dict, model: str, reg, engine: HarnessEngine | None = None) -> float | None:
@@ -210,6 +225,7 @@ def cost_of(agg_leaf: dict, model: str, reg, engine: HarnessEngine | None = None
                 agg_leaf["output_tokens"],
                 agg_leaf["cache_read_input_tokens"],
                 agg_leaf["cache_creation_input_tokens"],
+                agg_leaf.get("long_prompt"),
             )
         from traust_engine.registry import models as model_registry
 
@@ -220,6 +236,7 @@ def cost_of(agg_leaf: dict, model: str, reg, engine: HarnessEngine | None = None
             agg_leaf["output_tokens"],
             agg_leaf["cache_read_input_tokens"],
             agg_leaf["cache_creation_input_tokens"],
+            agg_leaf.get("long_prompt"),
         )
     except Exception:
         return None
@@ -290,6 +307,7 @@ def ledger_series(
                         int(m.get("tokens_out") or 0),
                         int(m.get("cache_read") or 0),
                         int(m.get("cache_creation") or 0),
+                        long_prompt=m.get("long_prompt"),
                     )
                 else:
                     derived = model_registry.cost_usd(
@@ -299,6 +317,7 @@ def ledger_series(
                         int(m.get("tokens_out") or 0),
                         int(m.get("cache_read") or 0),
                         int(m.get("cache_creation") or 0),
+                        long_prompt=m.get("long_prompt"),
                     )
             except Exception:
                 derived = None
@@ -620,7 +639,12 @@ def build_report(
             if engine is not None
             else css.workspace_slugs(ws)
         )
-        agg = collect_bu(dirs, maps, month, asp.known_skills())
+        thresholds = (
+            engine.models.long_prompt_thresholds()
+            if engine is not None
+            else model_registry_thresholds(reg)
+        )
+        agg = collect_bu(dirs, maps, month, asp.known_skills(), thresholds)
         costs, unpriced = bu_costs(agg, reg, engine=engine)
         total = sum(costs.values())
         known = total - costs.get(BU_UNKNOWN, 0.0)
