@@ -257,6 +257,13 @@ packet in one pass, scoring confidence inline instead of spawning
 Step 3b subagents (the findings count on such diffs is almost always
 0–3; per-finding scorer subagents cost more than they calibrate).
 
+**Review surfaces in the diff.** When a changed file or caller touches a
+credential verifier, a security flag or its readers, an outbound call, an
+owner lookup, a route guard or a content-assembly path, the cluster's brief
+names the matching review surface and its check (REVIEW SURFACES in the
+brief). The scan's `review_surface_coverage` answers each surface the diff
+touches with `finding` or `negative`, and the rest `out_of_scope` (Step 4).
+
 ### Deterministic pre-scanners — changed set only
 
 Run the standard wrappers, restricted to the changed set (record each
@@ -407,7 +414,10 @@ to (a) diff enforcement-layer references against their siblings' guards
 (a check every neighbor performs but one path skips is a finding),
 (b) verify any documented guard on *every* alternate path to the same
 sink (launch/bulk/schedule/copy; REST/websocket/callback), and
-(c) enumerate all emitters to an unchecked sink before rating it. On
+(c) enumerate all emitters to an unchecked sink before rating it, and
+(d) apply the check for each review surface
+([review-surfaces.md](../secure-code-audit/review-surfaces.md)) that the
+focus area touches, reporting what it examined. On
 targets ≥ ~50 kLoC add one **shadow lane**: a subsystem-scoped
 depth-first subagent with no vulnerability-class checklist, merged
 through the same triage bar.
@@ -472,6 +482,27 @@ WHAT TO LOOK FOR:
   - hardcoded secrets, weak crypto, broken cert validation
   - sensitive data (secrets, PII) in logs or error responses
 
+  REVIEW SURFACES — HIGH VALUE (the six surfaces audits most often miss;
+  check each one your focus area touches):
+  - credential-acceptance: a verifier that accepts a credential issued for
+    another purpose (another audience, a short-lived or refresh token), or
+    that revoking the credential does not stop
+  - ownership-resolution: an owner lookup by name or pattern (unescaped
+    `_`/`%` in LIKE/ILIKE, prefix match) that lets one owner reach another
+    owner's objects, on read, rename or delete paths
+  - security-flags: a shipped default that switches a control off, a
+    control that fails open when unconfigured, a hardcoded key used to sign
+    or encrypt. The defect is the default, so this is reportable even
+    though the flag itself is operator-set.
+  - outbound-fetch: a request whose destination someone other than the
+    operator controls (input, stored config, a value read from an
+    unverified token) that skips the SSRF guard its siblings use
+  - stored-content-integrity: the bytes verified and the bytes stored
+    differ (assembly offsets, partial or clamped copies), especially in a
+    deduplicated store
+  - scope-enforcement: a route or credential type that skips the scope or
+    role check its siblings apply
+
   LOW VALUE — note briefly, keep looking:
   - null-pointer deref at small fixed offsets with no attacker control
   - assertion failures / clean error returns (correct handling, not a bug)
@@ -514,6 +545,11 @@ OUTPUT — one block per finding, nothing else:
 <exploit_scenario>{concrete attack: what input, from where, causing what outcome}</exploit_scenario>
 <recommendation>{specific fix: parameterize the query, bounds-check before memcpy, etc.}</recommendation>
 </finding>
+
+Then one block per review surface you examined, whether or not it gave a
+finding, so the report can record what was checked:
+
+<surface id="{credential-acceptance | ownership-resolution | security-flags | outbound-fetch | stored-content-integrity | scope-enforcement}">{what you examined: files, call sites or the exact search pattern, and the result}</surface>
 
 SEVERITY — use the harness's shared five-level scale (same enum as
 secure-code-audit and triage):
@@ -769,7 +805,10 @@ the top of the file is the highest-signal material.
 review surfaces in [review-surfaces.md](../secure-code-audit/review-surfaces.md).
 Every surface needs an entry, and every status except `finding` needs a
 `note`. This report has no `negative_results`, so a `negative` note says
-what was examined.
+what was examined. Build those notes from the review subagents' `<surface>`
+blocks. A surface no subagent examined is `not_assessed` on a full scan, or
+`out_of_scope` on a `--diff` scan whose diff doesn't touch it, never
+`negative`.
 
 | Status | Use when |
 |---|---|

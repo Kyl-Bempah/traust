@@ -2,6 +2,33 @@
 
 All notable changes to Traust are documented here.
 
+## [0.25.0]
+
+- **`/threat-model` bootstrap maps the review surfaces.**
+  - The Surface-mapper's grep table gains five rows: credential verification
+    and minting, ownership resolution, security config flags, outbound fetch
+    and shared content stores. Route and guard coverage, the sixth surface,
+    stays under Network.
+  - Entry points those rows produce are tagged with `review_surfaces`.
+  - Stage 4's gap-fill walks each tagged surface's check from
+    `review-surfaces.md`, alongside STRIDE and the infra/IAM walk, and adds
+    plausible answers as tagged section 4 rows.
+- **The `/vuln-scan` review brief checks the review surfaces.**
+  - "WHAT TO LOOK FOR" gains a REVIEW SURFACES group, one line per surface.
+    A shipped default that switches a control off is reportable even though
+    flags are operator-set; the brief's exclusion for operator-controlled
+    flags covers flags as an attack vector, not unsafe defaults.
+  - The depth heuristics add (d): apply each touched surface's check.
+  - Each review subagent returns a `<surface>` block per surface it
+    examined, and Step 4 builds the `review_surface_coverage` notes from
+    them. A surface no subagent examined is `not_assessed` on a full scan
+    and `out_of_scope` on a diff scan, never `negative`.
+  - In `--diff` mode, a cluster that touches a verifier, a flag or its
+    readers, an outbound call, an owner lookup, a route guard or a
+    content-assembly path gets the matching surface check.
+- `/vuln-scan`'s diff-packet builder no longer quotes a deployment's pilot
+  cost figure in its docstring.
+
 ## [0.24.0]
 
 - **Per-model cache rates and per-request long-prompt pricing.** Pins

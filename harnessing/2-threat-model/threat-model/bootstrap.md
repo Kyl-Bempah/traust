@@ -186,6 +186,17 @@ language/framework the target actually uses.
 | IPC / plugins | dynamic load (e.g., `dlopen`); subprocess spawn; `eval`/`exec` on config; dynamic import |
 | Supply chain | dependency lockfiles; vendored libs; `curl \| sh` in build scripts |
 | Infra / IAM | terraform `google_*_iam_*`/`aws_iam_*`; k8s `serviceAccountName`/WIF annotations; BigQuery dataset/table `access{}` blocks; secrets mounts |
+| Credential verification / minting | token verify or decode calls (e.g., `jwt.decode`); password and hash comparisons; session lookups; token signing and refresh or exchange endpoints |
+| Ownership resolution | lookups that tie an object to its owner by name rather than key (e.g., `LIKE`/`ILIKE` or prefix match on a name column) |
+| Security config flags | settings defaults and environment fallbacks that switch a control (e.g., `DEBUG`, `verify=`, `insecure`/`skip_*` options); keys or secrets in shipped config |
+| Outbound fetch | HTTP client calls whose destination comes from input or stored config (e.g., `requests.get(`); identity-provider discovery and key-set URLs; followed redirects |
+| Shared content stores | digest-keyed or deduplicated blob storage; multipart or chunk assembly; server-side copy |
+
+The last five rows are the review surfaces in
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md)
+(route and guard coverage, the sixth, falls under Network). Tag each entry
+point they produce with `review_surfaces`, so Stage 4 walks them and the
+audit's coverage diff maps them.
 
 **Checkpoint:** Write tool → `./.threat-model-state/_chunk.tmp`:
 
@@ -396,6 +407,30 @@ cleanly than for code. Walk these instead:
 - **Scope enforcement**: where an automated approval, merge, or write path
   exists, what bounds it to its intended scope (path allowlist, label,
   reviewer set)?
+
+For **review-surface entry points** (tagged with `review_surfaces`), STRIDE
+misses the classic defects, so also walk each tagged surface's check in
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md):
+
+- **credential-acceptance:** can a credential issued for another purpose
+  (another audience, a short-lived or refresh token) pass this verifier, and
+  does revocation actually stop it?
+- **ownership-resolution:** can one owner's name match another owner's
+  objects (unescaped wildcard, prefix), on read, rename and delete paths?
+- **security-flags:** what does the shipped default do, does any reader of
+  the flag switch a control off, and does a control fail open when it is
+  unconfigured?
+- **outbound-fetch:** who controls the destination, including through
+  stored config or an unverified token, and is the guard applied to the
+  address actually connected to?
+- **stored-content-integrity:** are the bytes verified the bytes stored
+  after assembly, and can one bad object reach other tenants through
+  deduplication?
+- **scope-enforcement:** does every route and credential type apply the
+  scope check its siblings do?
+
+Each plausible answer is a section 4 row tagged with the same
+`review_surfaces`.
 
 **LINDDUN privacy overlay (conditional).** If section 2 contains
 personal-data assets (PII, user records, identifiers, behavioral/audit
