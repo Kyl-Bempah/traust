@@ -54,7 +54,9 @@ def materialize(src: Path, repos_dir: Path) -> tuple[str, Path]:
     dest = repos_dir / name
     if dest.exists():
         shutil.rmtree(dest)
-    shutil.copytree(src / "tree", dest)
+    # Only committed content: bytecode caches would make the SHA depend on
+    # whoever last ran Python over the source tree.
+    shutil.copytree(src / "tree", dest, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     import os
 
     env = {**os.environ, **GIT_ENV}

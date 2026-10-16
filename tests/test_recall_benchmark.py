@@ -611,6 +611,22 @@ def test_a_seeded_fixture_lists_every_expected_finding(tmp_path):
     assert not list(repo.rglob("seed.yaml")) and (repo / "main.py").exists()
 
 
+def test_bytecode_caches_never_enter_the_repo_or_change_the_sha(tmp_path):
+    meta = {"expected": [{"cwes": ["CWE-1"], "paths": ["main.py"], "severity": "low"}]}
+    entries = []
+    for name, with_cache in (("clean", False), ("dirty", True)):
+        work = tmp_path / name
+        work.mkdir()
+        src = _source(work / "sources", "app", "seed.yaml", meta)
+        if with_cache:
+            (src / "tree" / "__pycache__").mkdir()
+            (src / "tree" / "__pycache__" / "main.cpython-312.pyc").write_bytes(b"\x00junk")
+        entries.append(_build(work, work / "sources")[1]["bt-seeded-app"])
+    clean, dirty = entries
+    assert clean["pre_fix_sha"] == dirty["pre_fix_sha"]
+    assert not list(Path(dirty["repo_url"].removeprefix("file://")).rglob("*.pyc"))
+
+
 def test_an_answer_key_inside_the_tree_is_refused(tmp_path):
     sources = tmp_path / "sources"
     _source(

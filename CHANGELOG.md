@@ -16,6 +16,8 @@ All notable changes to Traust are documented here.
     answer key.
   - The manifest is now written with `allow_unicode`, so a rebuild no longer
     re-escapes every non-ASCII character in existing entries.
+  - Materializing skips `__pycache__/` and `*.pyc`, so a target's SHA depends
+    only on committed content, not on who last ran Python over the source.
   - The skill documents seeded fixtures: one defect per file (matching is by
     path and CWE), and nothing in `tree/` may hint at the answers.
 
