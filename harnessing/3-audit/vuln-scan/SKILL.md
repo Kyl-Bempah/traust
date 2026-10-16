@@ -776,9 +776,9 @@ what was examined.
 |---|---|
 | `finding` | a finding in this report is on the surface. `finding_ids` names its `findings[].id`. |
 | `negative` | the surface was in scope and examined, and nothing was found. The note names the files or call sites checked. |
-| `out_of_scope` | `--diff` only: the diff does not touch the surface. |
+| `out_of_scope` | `--diff` only: none of the in-scope diff files touch the surface. Changed files the resolver's first-party filter drops don't count. |
 | `not_applicable` | the surface does not exist in the target. |
-| `not_assessed` | the surface was in scope but not examined (budget, truncation). |
+| `not_assessed` | the surface was in scope but not examined (budget, truncation). The note is enough; this report has no `coverage_gaps`. |
 
 ```json
 "review_surface_coverage": {

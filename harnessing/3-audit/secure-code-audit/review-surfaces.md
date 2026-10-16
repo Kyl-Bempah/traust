@@ -175,7 +175,9 @@ credential type that bypasses fresh-login or scope limits altogether.
 Every code-profile report (from traust 0.20.0) and rpm-profile report (from
 0.21.0) carries `review_surface_coverage`: an object with one entry per
 surface, each `{"status": ...}` with one of the `review_surface_status`
-values in traust-contracts. The schema requires all six,
+values in traust-contracts. This section's table and example are for
+audit reports; scans record coverage differently (see
+[Scans that follow an audit](#scans-that-follow-an-audit)). The schema requires all six,
 and `traust reporting validate` checks each entry against the rest of the
 report, so a surface left out or pointed at nothing fails validation.
 
@@ -207,7 +209,11 @@ that the surface is absent, the other a recorded gap.
 `review_surface_coverage` in their own reports, from traust 0.21.0, for the
 code they reviewed: the whole tree, a `--diff`, or the regression-scan scope.
 Those reports have no `negative_results`, so every status except `finding`
-needs a `note`, and a `negative` note says what was examined. `finding_ids`
+needs a `note`, and a `negative` note says what was examined. A scan's
+`not_assessed` needs only the note: scan reports carry no `coverage_gaps`.
+For a `--diff` or regression-scan scope, a surface is touched only by the
+files in that scope; changed files the scope excludes (for example, ones the
+diff resolver's first-party filter drops) don't count. `finding_ids`
 name the scan's own findings: a vuln-scan's `findings[].id`, or a
 verification's `regressions[].id` or a re-checked `original_id`.
 

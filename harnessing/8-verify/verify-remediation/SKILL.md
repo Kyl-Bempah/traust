@@ -864,7 +864,8 @@ what was examined, because this report has no `negative_results`.
   the `original_id` of a re-checked finding that is still open on it.
 - `out_of_scope`: the scope does not touch the surface.
 - `not_applicable`: the surface does not exist in the target.
-- `not_assessed`: the surface is in scope but was not examined.
+- `not_assessed`: the surface is in scope but was not examined. The note
+  is enough; this report has no `coverage_gaps`.
 
 `/track-findings` merges the record into the repo's `*-findings-current.json`.
 A `finding` or `negative` updates the current record. `out_of_scope`,
