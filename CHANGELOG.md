@@ -2,6 +2,29 @@
 
 All notable changes to Traust are documented here.
 
+## [0.22.0]
+
+- **Model registry updated to the current Anthropic lineup** (published rate
+  card, checked 2026-10-16).
+  - **Mythos 5.1 replaces Mythos 5** in every role that approved it: all
+    nine `mythos-class` roles, plus the mythos escalation entries in
+    `fact-judge`, `fuzz-author` and `vuln-scan`. Mythos 5.1 is a
+    limited-availability model, so a deployment without access to it can no
+    longer resolve those roles.
+  - **Opus 5.5 is the preferred Opus**, then Opus 5, then Opus 4.8, in every
+    role that approved Opus 4.8. `fuzz-author` and `vuln-scan` now resolve to
+    Opus 5.5. `fact-judge` and `render-narrate` resolve at their own floors
+    and reach Opus only when escalated.
+  - **New rate-card entries:** `claude-mythos-5-1` and `claude-fable-5-1`
+    ($10/$50), `claude-opus-5-5` ($4/$20), `claude-sonnet-5-5` ($2/$10) and
+    `claude-haiku-5-5` ($0.10/$0.50 for prompts up to 100k tokens). Older
+    entries stay so past runs keep a price.
+  - **`claude-sonnet-5` corrected from $3/$15 to $2/$10.** Its launch price
+    became the standard price, so spend recorded against Sonnet 5 was
+    overstated by a third and drops on the next dashboard rebuild.
+  - The `claude-opus-4-6` note no longer calls its price empirical; it is on
+    the published card.
+
 ## [0.21.1]
 
 - **New `vuln-scan` model role** (floor `opus-class`, approved
