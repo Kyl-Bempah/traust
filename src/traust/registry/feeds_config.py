@@ -123,7 +123,7 @@ def retry_defaults(path: Path | None = None) -> dict:
     """Global download-retry policy from feeds.yaml ``retry:`` (empty when unset).
 
     A feed's own ``retry:`` block overrides these; fetch_feeds merges the two.
-    Returning {} rather than raising when absent keeps the built-in RetryPolicy
+    Returning {} rather than raising when absent keeps core's RetryPolicy
     defaults in force for a registry that predates this block.
     """
     retry = _load_raw(path).get("retry") or {}

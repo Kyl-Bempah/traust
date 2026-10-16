@@ -7,10 +7,23 @@ from pathlib import Path
 
 import pytest
 from traust_contracts import Locations
+from traust_core.v1.errors import ServiceError
+from traust_core.v1.providers.http import HttpFetcher
 
 from traust.paths import skill_dir
 
 _ROOT = Path(__file__).resolve().parents[1]
+
+
+def _fake_get(monkeypatch, outcome):
+    """Stub core's HttpFetcher.get: return ``outcome`` bytes or raise it."""
+
+    def _get(self, url):
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(HttpFetcher, "get", _get)
 
 
 def _load(name):
@@ -145,24 +158,14 @@ def test_offline_without_copy_fails(tmp_path):
 
 def test_fresh_copy_skips_download(tmp_path, monkeypatch):
     cache = _mk_cache(tmp_path, retrieved_at=ff._iso(ff._now()))
-    monkeypatch.setattr(
-        ff.urllib.request,
-        "urlopen",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("network touched")),
-    )
+    _fake_get(monkeypatch, AssertionError("network touched"))
     usable, status = ff.fetch("epss", cache, 24)
     assert usable and status.startswith("fresh")
 
 
 def test_failed_refresh_falls_back(tmp_path, monkeypatch):
     cache = _mk_cache(tmp_path, retrieved_at="2026-01-01T00:00:00Z")
-    import urllib.error
-
-    monkeypatch.setattr(
-        ff.urllib.request,
-        "urlopen",
-        lambda *a, **k: (_ for _ in ()).throw(urllib.error.URLError("no vpn")),
-    )
+    _fake_get(monkeypatch, ServiceError("no vpn"))
     usable, status = ff.fetch("epss", cache, 24)
     assert usable and "STALE" in status and "refresh failed" in status
 
@@ -378,27 +381,12 @@ def _fake_pages(monkeypatch, pages):
     """Serve canned JSON pages, recording the query string of each call."""
     calls = []
 
-    class _Resp:
-        def __init__(self, body):
-            self._b = body
-
-        def read(self):
-            return self._b
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    def _open(req, timeout=None):
-        url = req.full_url if hasattr(req, "full_url") else str(req)
+    def _get(self, url):
         calls.append(url)
         page = int(url.split("page=")[1].split("&")[0])
-        body = json.dumps(pages[page - 1] if page <= len(pages) else [])
-        return _Resp(body.encode())
+        return json.dumps(pages[page - 1] if page <= len(pages) else []).encode()
 
-    monkeypatch.setattr(ff.urllib.request, "urlopen", _open)
+    monkeypatch.setattr(HttpFetcher, "get", _get)
     return calls
 
 
@@ -506,109 +494,24 @@ def test_rh_cve_is_watched_by_drift():
 
 
 # ---------------- retry / stale (XWING-2223) ----------------
+# Retry/backoff behaviour is tested in traust-core (providers/test_http.py);
+# these cover what fetch_feeds does with the outcome.
 
 
-class _Resp:
-    def __init__(self, body: bytes):
-        self._body = body
+def test_shipped_retry_config_builds_core_policy():
+    from traust_core.v1.providers.http import RetryPolicy
 
-    def __enter__(self):
-        return self
+    from traust.registry.feeds_config import retry_defaults
 
-    def __exit__(self, *a):
-        return False
-
-    def read(self) -> bytes:
-        return self._body
-
-
-def _seq_urlopen(actions):
-    """Fake urlopen that walks a list of actions: bytes -> body, Exception -> raise."""
-    it = iter(actions)
-
-    def _open(req, timeout=None):
-        a = next(it)
-        if isinstance(a, Exception):
-            raise a
-        return _Resp(a)
-
-    return _open
-
-
-def _http_error(code, headers=None):
-    import urllib.error
-
-    return urllib.error.HTTPError("http://feed.test", code, "err", headers or {}, None)
-
-
-def _policy(**kw):
-    base = dict(max_attempts=3, timeout_s=1, backoff_base_s=0, max_wait_s=0, jitter_s=0)
-    base.update(kw)
-    return ff.RetryPolicy(**base)
-
-
-def test_retry_503_then_200(monkeypatch):
-    monkeypatch.setattr(ff.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ff.urllib.request, "urlopen", _seq_urlopen([_http_error(503), b"ok"]))
-    assert ff.fetch_with_retry("http://feed.test", _policy()) == b"ok"
-
-
-def test_retry_honors_429_retry_after(monkeypatch):
-    slept = []
-    monkeypatch.setattr(ff.time, "sleep", slept.append)
-    monkeypatch.setattr(
-        ff.urllib.request,
-        "urlopen",
-        _seq_urlopen([_http_error(429, {"Retry-After": "2"}), b"ok"]),
-    )
-    assert ff.fetch_with_retry("http://feed.test", _policy(max_wait_s=10)) == b"ok"
-    assert slept == [2.0]
-
-
-def test_retry_timeout_then_success(monkeypatch):
-    monkeypatch.setattr(ff.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ff.urllib.request, "urlopen", _seq_urlopen([TimeoutError("slow"), b"ok"]))
-    assert ff.fetch_with_retry("http://feed.test", _policy()) == b"ok"
-
-
-def test_non_429_4xx_fails_fast(monkeypatch):
-    calls = []
-
-    def _open(req, timeout=None):
-        calls.append(1)
-        raise _http_error(404)
-
-    monkeypatch.setattr(ff.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ff.urllib.request, "urlopen", _open)
-    with pytest.raises(ff.FeedError):
-        ff.fetch_with_retry("http://feed.test", _policy())
-    assert len(calls) == 1  # a 404 is not retried
-
-
-def test_gives_up_after_max_attempts(monkeypatch):
-    calls = []
-
-    def _open(req, timeout=None):
-        calls.append(1)
-        raise TimeoutError("slow")
-
-    monkeypatch.setattr(ff.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ff.urllib.request, "urlopen", _open)
-    with pytest.raises(ff.FeedError):
-        ff.fetch_with_retry("http://feed.test", _policy(max_attempts=3))
-    assert len(calls) == 3
+    shipped = retry_defaults(_ROOT / "config" / "feeds.yaml")
+    assert (
+        RetryPolicy(**shipped).max_attempts == shipped["max_attempts"]
+    )  # unknown key -> TypeError
 
 
 def test_stale_fallback_records_last_error(tmp_path, monkeypatch):
-    import urllib.error
-
     cache = _mk_cache(tmp_path, retrieved_at="2026-01-01T00:00:00Z")
-    monkeypatch.setattr(ff.time, "sleep", lambda s: None)
-    monkeypatch.setattr(
-        ff.urllib.request,
-        "urlopen",
-        lambda *a, **k: (_ for _ in ()).throw(urllib.error.URLError("no vpn")),
-    )
+    _fake_get(monkeypatch, ServiceError("http://feed.test: gave up after 4 attempts (no vpn)"))
     usable, status = ff.fetch("epss", cache, 24)
     assert usable and "STALE" in status
     meta = json.loads((cache / "feeds-meta.json").read_text())["epss"]
@@ -620,8 +523,7 @@ def test_stale_fallback_records_last_error(tmp_path, monkeypatch):
 def test_corrupt_download_keeps_old_copy(tmp_path, monkeypatch):
     cache = _mk_cache(tmp_path, retrieved_at="2026-01-01T00:00:00Z")
     good = (cache / "epss_scores-current.csv.gz").read_bytes()
-    monkeypatch.setattr(ff.time, "sleep", lambda s: None)
-    monkeypatch.setattr(ff.urllib.request, "urlopen", _seq_urlopen([b"not a gzip payload"]))
+    _fake_get(monkeypatch, b"not a gzip payload")
     usable, status = ff.fetch("epss", cache, 24)
     assert usable and "STALE" in status  # corrupt refresh falls back, never unusable here
     assert (cache / "epss_scores-current.csv.gz").read_bytes() == good  # cache not overwritten

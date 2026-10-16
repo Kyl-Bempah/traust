@@ -73,16 +73,13 @@ import gzip
 import hashlib
 import io
 import json
-import random
 import re
 import sys
-import time
-import urllib.error
-import urllib.request
-from dataclasses import dataclass, fields
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 
+from traust_core.v1.errors import ServiceError
+from traust_core.v1.providers.feeds import validate_payload
+from traust_core.v1.providers.http import HttpFetcher, RetryPolicy
 from traust_engine import locations
 
 from traust.context import add_config_home_arg, load_engine
@@ -96,79 +93,15 @@ DEFAULT_MAX_AGE_HOURS = 24.0
 # window is ~12 pages, so 60 is far above any real fetch.
 MAX_FEED_PAGES = 60
 
-DEFAULT_TIMEOUT_S = 120.0
-
-
-class FeedError(RuntimeError):
-    """A feed download gave up after exhausting its retry policy."""
-
-
-@dataclass(frozen=True)
-class RetryPolicy:
-    max_attempts: int = 4
-    timeout_s: float = DEFAULT_TIMEOUT_S
-    backoff_base_s: float = 1.0
-    max_wait_s: float = 60.0
-    jitter_s: float = 0.0
-
-    @classmethod
-    def from_config(cls, defaults: dict | None, override: dict | None = None) -> RetryPolicy:
-        merged = {**(defaults or {}), **(override or {})}
-        allowed = {f.name for f in fields(cls)}
-        return cls(**{k: v for k, v in merged.items() if k in allowed})
-
 
 def _retry_policy(name: str) -> RetryPolicy:
     """Global retry defaults from feeds.yaml, overridden by the feed's own `retry:`."""
-    return RetryPolicy.from_config(retry_defaults(), _feeds().get(name, {}).get("retry"))
+    return RetryPolicy(**{**retry_defaults(), **(_feeds().get(name, {}).get("retry") or {})})
 
 
-def _parse_retry_after(value: str | None) -> float | None:
-    """Retry-After as delta-seconds or an HTTP-date; None when absent/unparseable."""
-    if not value:
-        return None
-    value = value.strip()
-    if value.isdigit():
-        return float(value)
-    try:
-        when = parsedate_to_datetime(value)
-    except (TypeError, ValueError):
-        return None
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=datetime.UTC)
-    return max(0.0, (when - _now()).total_seconds())
+def _fetcher(name: str) -> HttpFetcher:
+    return HttpFetcher(USER_AGENT, _retry_policy(name))
 
-
-def _backoff(policy: RetryPolicy, attempt: int) -> float:
-    wait = min(policy.backoff_base_s * (2**attempt), policy.max_wait_s)
-    return wait + (random.uniform(0, policy.jitter_s) if policy.jitter_s else 0.0)
-
-
-def fetch_with_retry(url: str, policy: RetryPolicy) -> bytes:
-    """GET ``url`` with bounded retries. Raises FeedError once attempts are spent.
-
-    429 waits out Retry-After (capped by max_wait_s); 5xx and timeouts use
-    capped exponential backoff; a non-429 4xx fails immediately (retrying a
-    403/404 just burns the window). The caller falls back to the cached copy.
-    """
-    last = ""
-    for attempt in range(policy.max_attempts):
-        req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-        try:
-            with urllib.request.urlopen(req, timeout=policy.timeout_s) as r:
-                return r.read()
-        except urllib.error.HTTPError as e:
-            if e.code != 429 and not (500 <= e.code < 600):
-                raise FeedError(f"{url}: HTTP {e.code}") from e
-            last = f"HTTP {e.code}"
-            after = _parse_retry_after(e.headers.get("Retry-After")) if e.headers else None
-            delay = _backoff(policy, attempt) if after is None else min(after, policy.max_wait_s)
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            last = str(e)
-            delay = _backoff(policy, attempt)
-        if attempt + 1 < policy.max_attempts:
-            time.sleep(delay)
-    raise FeedError(f"{url}: gave up after {policy.max_attempts} attempts ({last})")
 
 # The vulnerability-data sources come from config/feeds.yaml — one
 # registry shared with fetch_advisory.py (live tier) and check_drift.py
@@ -337,7 +270,9 @@ def _feed_extra(name: str, raw: bytes) -> dict:
     return {}
 
 
-def _fetch_paginated(spec: dict, since: str | None, policy: RetryPolicy) -> tuple[list, str | None]:
+def _fetch_paginated(
+    spec: dict, since: str | None, fetcher: HttpFetcher
+) -> tuple[list, str | None]:
     """Page a date-windowed JSON list endpoint. Returns (records, watermark).
 
     Pages *within* the window rather than assuming a window fits one page:
@@ -353,7 +288,7 @@ def _fetch_paginated(spec: dict, since: str | None, policy: RetryPolicy) -> tupl
         q = f"?{pag['page_param']}={page}&per_page={per_page}"
         if since and inc.get("since_param"):
             q += f"&{inc['since_param']}={since}"
-        batch = json.loads(fetch_with_retry(spec["url"] + q, policy))
+        batch = json.loads(fetcher.get(spec["url"] + q))
         if not isinstance(batch, list):
             raise ValueError(f"expected a JSON list, got {type(batch).__name__}")
         for rec in batch:
@@ -370,30 +305,6 @@ def _fetch_paginated(spec: dict, since: str | None, policy: RetryPolicy) -> tupl
                 f"narrow the window or raise MAX_FEED_PAGES"
             )
     return out, watermark
-
-
-def _validate_payload(spec: dict, raw: bytes) -> None:
-    """Raise ValueError when `raw` isn't well-formed for the feed's file type.
-
-    These feeds publish no checksum, so "corrupt" means "does not decode as its
-    declared type" (gzip / JSON / UTF-8 text) — enough to stop a garbage 200
-    from overwriting a good cached copy. The VEX archive, which DOES ship a
-    checksum, is verified the strict way in XWING-2224. Dispatch is on the
-    cache file's extension so no feed name is hardcoded.
-    """
-    if not raw:
-        raise ValueError("empty payload")
-    suffix = "".join(Path(spec.get("file") or spec.get("index_file") or "").suffixes)
-    try:
-        if suffix.endswith(".gz"):
-            raw = gzip.decompress(raw)
-            suffix = suffix[:-3]
-        if suffix.endswith(".json"):
-            json.loads(raw)
-        elif suffix.endswith(".csv"):
-            raw.decode("utf-8")
-    except (OSError, EOFError, ValueError) as e:
-        raise ValueError(f"corrupt payload: {e}") from e
 
 
 def fetch(name: str, cache: Path, max_age_hours: float, offline: bool = False) -> tuple[bool, str]:
@@ -424,8 +335,8 @@ def fetch(name: str, cache: Path, max_age_hours: float, offline: bool = False) -
         inc = spec.get("incremental") or {}
         since = entry.get("watermark") or inc.get("backfill_from")
         try:
-            fresh, watermark = _fetch_paginated(spec, since, _retry_policy(name))
-        except (FeedError, urllib.error.URLError, OSError, TimeoutError, ValueError) as e:
+            fresh, watermark = _fetch_paginated(spec, since, _fetcher(name))
+        except (ServiceError, ValueError) as e:
             _record_attempt(cache, meta, name, error=str(e))
             if path.is_file():
                 return True, (
@@ -467,9 +378,9 @@ def fetch(name: str, cache: Path, max_age_hours: float, offline: bool = False) -
 
     url = spec.get("url") or spec["index_url"]
     try:
-        raw = fetch_with_retry(url, _retry_policy(name))
-        _validate_payload(spec, raw)
-    except (FeedError, urllib.error.URLError, OSError, TimeoutError, ValueError) as e:
+        raw = _fetcher(name).get(url)
+        validate_payload(raw, spec.get("file") or spec.get("index_file") or "")
+    except (ServiceError, ValueError) as e:
         _record_attempt(cache, meta, name, error=str(e))
         if path.is_file():
             return True, (
@@ -620,7 +531,7 @@ def load_vex(cache: Path, cve: str, offline: bool = False) -> dict:
     if offline:
         raise FileNotFoundError(f"{cve} not in the VEX cache and --offline")
     url = spec["doc_url_template"].format(year=year, ident_lower=ident)
-    raw = fetch_with_retry(url, _retry_policy("vex"))
+    raw = _fetcher("vex").get(url)
     doc_path.parent.mkdir(parents=True, exist_ok=True)
     doc_path.write_bytes(raw)
     return json.loads(raw.decode("utf-8"))
