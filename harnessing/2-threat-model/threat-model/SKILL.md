@@ -106,7 +106,7 @@ user about the migration, and targets the new name from then on.
 runtime as "Base directory for this skill"; it is
 `traust/harnessing/2-threat-model/threat-model` — `interview.md`,
 `bootstrap.md`, `review.md`, `pr.md`, and `schema.md` live there). `<harness>` is the
-traust repo root, i.e. `<skill-base>/../..`; checkpoint I/O
+traust repo root, i.e. `<skill-base>/../../..`; checkpoint I/O
 uses `python3 -m traust.cli admin checkpoint`. Resolve both to absolute
 paths once at startup.
 

@@ -28,7 +28,7 @@ Skills with no infrastructure requirement need only the workflow engine and a ta
 | `pqc-readiness` | — | Post-quantum crypto readiness: pinned pqc-scan facts + NIST IR 8547 transition clocks, provenance + VULN/AGIL/PQCA/HNDL scoring, CycloneDX CBOM | Any single repo checkout | Rust toolchain (build only) | mythos-class |
 | `mine-ledger` | — | Mines ledger-confirmed TPs into the opengrep rule-calibration corpus: coverage gaps, per-rule precision, authoring backlog | Any findings directory with cumulative reports | — | opus-class |
 | `security-audit-phased` | ③ (alt) | Multi-phase human-in-the-loop audit: recon → prior-vuln patterns → CWE-taxonomy walk | Any local checkout | — | mythos-class |
-| `vuln-scan` | ③ (alt) | Lightweight vulnerability sweep: threat-model-scoped focus areas, parallel review subagents, baseline dedupe | Any local checkout | — | mythos-class |
+| `vuln-scan` | ③ (alt) | Lightweight vulnerability sweep: threat-model-scoped focus areas, parallel review subagents, baseline dedupe | Any local checkout | — | opus-class |
 | `triage` | ④ | Adversarial N-vote verification, dedup, precondition-derived re-ranking, and owner routing of raw findings; citation-gated and symbol-index-accelerated | Any scanner output (directory or file) | — | mythos-class |
 | `countersign` | ④ | Human sign-off inbox for the disposition ledger — self-contained decision cards for pending false-positive countersigns; LDAP-verified recording | Any findings directory | Red Hat LDAP (VPN) | opus-class |
 | `validate-findings` | ⑤ (sub) | Proves/refutes findings against live environment, chains kill-chains | Any audit report | Ephemeral OCP Cluster | mythos-class |

@@ -2,6 +2,25 @@
 
 All notable changes to Traust are documented here.
 
+## [0.21.1]
+
+- **New `vuln-scan` model role** (floor `opus-class`, approved
+  `claude-opus-4-8` and `claude-mythos-5`, no ledger validity). `/vuln-scan`
+  resolved its model through the registry but named no role, so it ran
+  unrouted on whatever model the session had. It now runs on, and records
+  spend against, `registry models resolve vuln-scan`. The role is separate
+  from `deep-audit`, so scan cost tunes on its own. `docs/model-classes.md`
+  and `docs/standalone-usage.md` move `vuln-scan` to `opus-class`.
+- **Repo-root paths after the stage-directory move.** `/vuln-scan`,
+  `/triage`, `/countersign`, `/threat-model` and `/patch` defined `<harness>`
+  as `<skill-base>/../..`, which since the move to
+  `harnessing/<N>-<stage>/<skill>` points at `harnessing/`, not the repo root.
+  Script paths built on it (for example `/triage`'s
+  `<harness>/harnessing/4-triage/triage/scripts/...`) did not exist. Now
+  `<skill-base>/../../..`.
+- `/vuln-scan` diff mode names `scripts/resolve_baseline.py` and
+  `scripts/build_diff_packet.py` at their real paths.
+
 ## [0.21.0]
 
 - **Review-surface coverage beyond the audit.** traust-contracts 0.57.0 and
