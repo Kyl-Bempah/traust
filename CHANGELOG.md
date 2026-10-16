@@ -28,10 +28,18 @@ All notable changes to Traust are documented here.
     flags are operator-set; the brief's exclusion for operator-controlled
     flags covers flags as an attack vector, not unsafe defaults.
   - The depth heuristics add (d): apply each touched surface's check.
+  - The brief template now carries the depth heuristics (a)–(d) itself.
+  - Each reported finding names its `<review_surface>`: the surface where
+    the defect sits, whatever its CWE.
   - Each review subagent returns a `<surface>` block per surface it
-    examined, and Step 4 builds the `review_surface_coverage` notes from
-    them. A surface no subagent examined is `not_assessed` on a full scan
-    and `out_of_scope` on a diff scan, never `negative`.
+    examined, using only the six ids.
+  - Step 4 builds `review_surface_coverage` from the subagents' output:
+    - `finding` lists every finding naming the surface.
+    - `negative` combines what each subagent examined, and only when no
+      finding names the surface.
+    - `not_applicable` requires every subagent that looked to agree.
+    - A surface nobody examined is `not_assessed` on a full scan and
+      `out_of_scope` on a diff scan, never `negative`.
   - In `--diff` mode, a cluster that touches a verifier, a flag or its
     readers, an outbound call, an owner lookup, a route guard or a
     content-assembly path gets the matching surface check.

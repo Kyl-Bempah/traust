@@ -461,6 +461,13 @@ story at all — but if you're unsure whether something is real, REPORT IT
 with a low confidence score rather than dropping it. A downstream triage
 step does the rigorous verification; your job is to not miss things.
 
+DEPTH: (a) compare each enforcement check with its siblings: a guard every
+neighbour applies but one path skips is a finding; (b) verify a documented
+guard on every alternate path to the same sink (bulk, scheduled, copy,
+websocket, callback); (c) find every emitter into an unchecked sink before
+rating it; (d) apply the check for each review surface below that your focus
+area touches, and report what you examined.
+
 WHAT TO LOOK FOR:
 
   MEMORY SAFETY (C/C++ and unsafe/FFI blocks) — HIGH VALUE:
@@ -544,10 +551,12 @@ OUTPUT — one block per finding, nothing else:
 <description>{root cause, attacker control, trigger condition, data flow from entry to sink. Cite line numbers.}</description>
 <exploit_scenario>{concrete attack: what input, from where, causing what outcome}</exploit_scenario>
 <recommendation>{specific fix: parameterize the query, bounds-check before memcpy, etc.}</recommendation>
+<review_surface>{the review surface the defect sits on, from the six ids below, or none}</review_surface>
 </finding>
 
 Then one block per review surface you examined, whether or not it gave a
-finding, so the report can record what was checked:
+finding, so the report can record what was checked. Use only these six ids;
+anything else is a finding or nothing:
 
 <surface id="{credential-acceptance | ownership-resolution | security-flags | outbound-fetch | stored-content-integrity | scope-enforcement}">{what you examined: files, call sites or the exact search pattern, and the result}</surface>
 
@@ -805,10 +814,19 @@ the top of the file is the highest-signal material.
 review surfaces in [review-surfaces.md](../secure-code-audit/review-surfaces.md).
 Every surface needs an entry, and every status except `finding` needs a
 `note`. This report has no `negative_results`, so a `negative` note says
-what was examined. Build those notes from the review subagents' `<surface>`
-blocks. A surface no subagent examined is `not_assessed` on a full scan, or
-`out_of_scope` on a `--diff` scan whose diff doesn't touch it, never
-`negative`.
+what was examined. Build the record from the review subagents' output:
+- `finding`: `finding_ids` lists every reported finding whose
+  `<review_surface>` is this surface. A finding sits on the surface where the
+  defect is, whatever its CWE: a shared credential used for user-driven
+  fetches is `outbound-fetch` even though it isn't SSRF.
+- `negative`: no finding names the surface, and at least one subagent
+  examined it and found nothing. The note combines what each one examined. A
+  subagent that claims a problem without filing a finding doesn't count.
+- `not_applicable`: only when every subagent that looked at the surface says
+  it doesn't exist in the target.
+- A surface no subagent examined is `not_assessed` on a full scan, or
+  `out_of_scope` on a `--diff` scan whose diff doesn't touch it, never
+  `negative`.
 
 | Status | Use when |
 |---|---|
