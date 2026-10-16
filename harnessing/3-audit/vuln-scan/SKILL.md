@@ -817,13 +817,19 @@ Every surface needs an entry, and every status except `finding` needs a
 what was examined. Build the record from the review subagents' output:
 - `finding`: `finding_ids` lists every reported finding whose
   `<review_surface>` is this surface. A finding sits on the surface where the
-  defect is, whatever its CWE: a shared credential used for user-driven
-  fetches is `outbound-fetch` even though it isn't SSRF.
+  defect is, whatever its CWE. When Step 3 merges duplicates of one defect
+  that name different surfaces, keep one finding and the one surface where
+  the defect sits, and say so in its `confidence_reason`.
 - `negative`: no finding names the surface, and at least one subagent
   examined it and found nothing. The note combines what each one examined. A
   subagent that claims a problem without filing a finding doesn't count.
-- `not_applicable`: only when every subagent that looked at the surface says
-  it doesn't exist in the target.
+  When the surface's only defect is a known baseline finding (deduped into
+  `known_findings`), the surface is `negative` for this scan, and the note
+  names the baseline id: the audit's record already carries that finding.
+- `not_applicable`: only when a subagent states the surface doesn't exist
+  anywhere in the target. "Not in my focus files" means the subagent didn't
+  examine the surface; it neither supports `not_applicable` nor counts as a
+  `negative`.
 - A surface no subagent examined is `not_assessed` on a full scan, or
   `out_of_scope` on a `--diff` scan whose diff doesn't touch it, never
   `negative`.
