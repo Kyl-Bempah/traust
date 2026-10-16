@@ -1090,7 +1090,7 @@ def record_decisions(
             import os
 
             layer_ref = os.path.relpath(lp, base.parent)
-            report = build_cumulative(audit, layer, layer_ref, recorded_at)
+            report = build_cumulative(audit, layer, layer_ref, recorded_at, audit_path=aj)
             # NOT with_suffix(): dotted repo slugs (3scale.github.io) would
             # have their "extension" replaced, misnaming the outputs.
             (base.parent / (base.name + ".json")).write_text(

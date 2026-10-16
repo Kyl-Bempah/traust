@@ -2,6 +2,41 @@
 
 All notable changes to Traust are documented here.
 
+## [0.21.0]
+
+- **Review-surface coverage beyond the audit.** traust-contracts 0.57.0 and
+  traust-engine 0.26.0 (pinned here) declare and check the record on the
+  scans that follow an audit.
+  - `/vuln-scan` and `/verify-remediation` record `review_surface_coverage`
+    for the code they reviewed. A `--diff` or regression-scan scope answers
+    untouched surfaces `out_of_scope`. These reports have no
+    `negative_results`, so every status except `finding` carries a note.
+  - `/secure-rpm-audit` records the record too, weighting dist-git patches
+    and spec-shipped defaults.
+  - `/threat-model` tags threats and entry points with `review_surfaces`.
+  - `traust reporting validate` requires the record on vuln-findings,
+    verification and rpm-profile reports from this release (0.21.0) on.
+- **`build_cumulative` merges scan coverage into `*-findings-current.json`.**
+  It finds scan reports through the `source.ref` of the
+  `vuln_scan_report` / `verification_report` events it replays, and as the
+  repo's own `<repo>-vuln-findings.json` / `<repo>-remediation-verification.json`
+  (a scan with no new findings writes no events). Only scans dated on or
+  after the audit apply, oldest first.
+  - A `finding` adds its IDs; a routed regression maps to its `routed_id`.
+  - A `negative` replaces earlier answers, but never a `finding` entry whose
+    findings are still open. Its note becomes a `negative_results` entry.
+  - A scan's `out_of_scope`, `not_applicable` and `not_assessed` change
+    nothing.
+  - An audit with no record (before traust 0.20.0) starts at `not_assessed`
+    with matching `coverage_gaps`, once a scan record applies.
+  - `metadata.additional.cumulative.review_surface_sources` names the scan
+    that last answered each surface.
+  - With no scan record, the output is unchanged.
+  - `countersign` passes the audit path through, so its rebuilds merge too.
+- The method companion `review-surfaces.md` documents `out_of_scope`, the
+  scan records, the merge and the threat-model tags; `/track-findings` and
+  `docs/report-structure.md` link it.
+
 ## [0.20.2]
 
 - **Pins traust-engine 0.25.2** (`87a94fc`). `traust reporting validate`

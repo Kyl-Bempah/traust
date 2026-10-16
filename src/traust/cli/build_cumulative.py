@@ -296,8 +296,182 @@ def derive_disposition(finding, events, generated_at):
     return disposition
 
 
-def build_cumulative(audit, layer, layer_ref, generated_at):
-    """Return the cumulative report dict, or raise ValueError on bad refs."""
+# --- Review-surface coverage from the scans that follow an audit ----------
+#
+# /vuln-scan and /verify-remediation record review_surface_coverage in their
+# own reports (traust-contracts 0.57.0). The cumulative report carries the
+# merged, current record. A scan is found two ways: through the source.ref of
+# the vuln_scan_report / verification_report events this layer replays, and
+# as the repo's own <base>-vuln-findings.json / <base>-remediation-verification.json
+# next to the audit, because a scan with no new findings writes no events.
+# Only scans dated on or after the audit apply.
+#
+# Merge rules (owner decision, 2026-10-15):
+#   finding      adds its ids to an existing finding entry; replaces any other
+#                status. Ids are mapped to findings-current ids (a routed
+#                regression's routed_id); an id with no finding here is dropped.
+#   negative     replaces negative / not_applicable / not_assessed, but never a
+#                finding entry while any of its findings is still open. Its note
+#                becomes a negative_results entry, so the record stays
+#                checkable against the report.
+#   out_of_scope, not_applicable, not_assessed (from a scan): never replace.
+# An audit with no record of its own (every audit before traust 0.20.0) starts
+# from not_assessed on every surface, with the matching coverage_gaps entries,
+# once at least one scan record applies.
+
+SCAN_SUFFIXES = {
+    "vuln-findings": "-vuln-findings.json",
+    "verification": "-remediation-verification.json",
+}
+SCAN_SOURCE_TYPES = {"vuln_scan_report": "vuln-findings", "verification_report": "verification"}
+OPEN_RESOLUTIONS = {"open", "fix_in_progress", "partially_resolved", "regression_introduced"}
+NO_AUDIT_RECORD = "the audit predates review-surface coverage"
+
+
+def _resolve_ref(ref, audit_path):
+    """A source.ref is a report path relative to some ancestor of the audit
+    (the workspace or the results root) or absolute."""
+    p = Path(ref)
+    if p.is_absolute():
+        return p if p.is_file() else None
+    for parent in audit_path.resolve().parents:
+        candidate = parent / p
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def find_scan_reports(audit_path, layer):
+    """[(kind, path)] of the scan reports that may carry coverage for this audit."""
+    audit_path = Path(audit_path)
+    found = {}
+    for e in layer.get("events") or []:
+        source = e.get("source") or {}
+        kind = SCAN_SOURCE_TYPES.get(source.get("type"))
+        if kind and source.get("ref"):
+            path = _resolve_ref(source["ref"], audit_path)
+            if path is not None and path.name.endswith(SCAN_SUFFIXES[kind]):
+                found[path.resolve()] = kind
+    stem = audit_path.name
+    for suffix in ("-security-audit.json", ".json"):
+        if stem.endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    for kind, suffix in SCAN_SUFFIXES.items():
+        sibling = audit_path.parent / f"{stem}{suffix}"
+        if sibling.is_file():
+            found[sibling.resolve()] = kind
+    return sorted(((kind, path) for path, kind in found.items()), key=lambda kp: str(kp[1]))
+
+
+def _scan_date(kind, doc):
+    raw = (
+        doc.get("scanned_at")
+        if kind == "vuln-findings"
+        else (doc.get("metadata") or {}).get("date")
+    )
+    return str(raw or "")
+
+
+def merge_review_surfaces(report, scans, audit_date, audit_dir):
+    """Merge the scans' review_surface_coverage into the cumulative report.
+
+    ``scans`` is [(kind, path, document)]. Returns the surfaces a scan answered.
+    """
+    from traust_contracts.paths import enum_dir
+
+    surfaces = json.loads((enum_dir() / "review-surface.json").read_text(encoding="utf-8"))[
+        "values"
+    ]
+    audit_day = str(audit_date or "")[:10]
+    applicable = []
+    for kind, path, doc in scans:
+        record = doc.get("review_surface_coverage")
+        date = _scan_date(kind, doc)
+        if isinstance(record, dict) and date[:10] >= audit_day:
+            applicable.append((date, str(path), kind, path, doc, record))
+    if not applicable:
+        return {}
+    applicable.sort(key=lambda a: (a[0], a[1]))
+
+    meta = report.setdefault("metadata", {})
+    additional = meta.setdefault("additional", {})
+    record = report.get("review_surface_coverage")
+    if not isinstance(record, dict):
+        record = {s: {"status": "not_assessed", "note": NO_AUDIT_RECORD} for s in surfaces}
+        gaps = additional.setdefault("coverage_gaps", [])
+        have = {(g.get("tool"), g.get("system")) for g in gaps if isinstance(g, dict)}
+        for s in surfaces:
+            if ("review-surfaces", s) not in have:
+                gaps.append({"tool": "review-surfaces", "system": s, "reason": NO_AUDIT_RECORD})
+    record = json.loads(json.dumps(record))
+
+    present = {f.get("id"): f for f in report.get("findings", [])}
+
+    def still_open(fid):
+        disp = (present.get(fid) or {}).get("disposition") or {}
+        return (
+            disp.get("validity") != "false_positive" and disp.get("resolution") in OPEN_RESOLUTIONS
+        )
+
+    sources = {}
+    for date, _key, kind, path, doc, scan_record in applicable:
+        routed = {
+            r.get("id"): r.get("routed_id")
+            for r in doc.get("regressions") or []
+            if isinstance(r, dict) and r.get("routed_id")
+        }
+        ref = os.path.relpath(Path(path).resolve(), Path(audit_dir).resolve())
+        for s in surfaces:
+            entry = scan_record.get(s)
+            if not isinstance(entry, dict):
+                continue
+            current = record.get(s) or {}
+            status = entry.get("status")
+            if status == "finding":
+                ids = [routed.get(i, i) for i in entry.get("finding_ids") or []]
+                ids = [i for i in ids if i in present]
+                if not ids:
+                    continue
+                if current.get("status") == "finding":
+                    merged = list(current.get("finding_ids") or [])
+                    merged += [i for i in ids if i not in merged]
+                    record[s] = {**current, "finding_ids": merged}
+                else:
+                    record[s] = {"status": "finding", "finding_ids": ids}
+                sources[s] = ref
+            elif status == "negative":
+                if current.get("status") == "finding" and any(
+                    still_open(i) for i in current.get("finding_ids") or []
+                ):
+                    continue
+                note = str(entry.get("note") or "")
+                record[s] = {"status": "negative", "note": note}
+                report.setdefault("negative_results", []).append(
+                    {"area": f"{s} ({kind} {date[:10]})", "result": note}
+                )
+                sources[s] = ref
+
+    # A surface a scan has now answered is no longer a coverage gap.
+    if "coverage_gaps" in additional:
+        additional["coverage_gaps"] = [
+            g
+            for g in additional["coverage_gaps"]
+            if not (
+                isinstance(g, dict)
+                and g.get("tool") == "review-surfaces"
+                and (record.get(g.get("system")) or {}).get("status") != "not_assessed"
+            )
+        ]
+    report["review_surface_coverage"] = record
+    return sources
+
+
+def build_cumulative(audit, layer, layer_ref, generated_at, audit_path=None):
+    """Return the cumulative report dict, or raise ValueError on bad refs.
+
+    With ``audit_path``, review-surface coverage recorded by later scans is
+    merged in (see merge_review_surfaces)."""
     findings = {f["id"]: f for f in audit.get("findings", [])}
 
     # B2 — union event-carried findings with the baseline's own.
@@ -452,6 +626,16 @@ def build_cumulative(audit, layer, layer_ref, generated_at):
         "original_report_date": meta.get("date"),
         "generated_at": generated_at,
     }
+    if audit_path is not None:
+        scans = []
+        for kind, path in find_scan_reports(audit_path, layer):
+            try:
+                scans.append((kind, path, json.loads(path.read_text(encoding="utf-8"))))
+            except (OSError, json.JSONDecodeError) as e:
+                print(f"WARN: cannot read scan report {path}: {e}", file=sys.stderr)
+        sources = merge_review_surfaces(report, scans, meta.get("date"), Path(audit_path).parent)
+        if sources:
+            additional["cumulative"]["review_surface_sources"] = sources
     meta["date"] = generated_at[:10]
     return report
 
@@ -771,7 +955,7 @@ def main(argv=None):
 
     layer_ref = os.path.relpath(layer_path, base.parent)
     try:
-        report = build_cumulative(audit, layer, layer_ref, generated_at)
+        report = build_cumulative(audit, layer, layer_ref, generated_at, audit_path=audit_path)
     except ValueError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2

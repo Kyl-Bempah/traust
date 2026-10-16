@@ -765,6 +765,37 @@ convention as `<repo>-security-audit.{json,md}` and
 Findings are sorted by `confidence` desc (then severity, file, line), so
 the top of the file is the highest-signal material.
 
+**Review-surface coverage (required from traust 0.21.0).** Add a top-level
+`review_surface_coverage` recording how this scan answered each of the six
+review surfaces in [review-surfaces.md](../secure-code-audit/review-surfaces.md).
+Every surface needs an entry, and every status except `finding` needs a
+`note`. This report has no `negative_results`, so a `negative` note says
+what was examined.
+
+| Status | Use when |
+|---|---|
+| `finding` | a finding in this report is on the surface. `finding_ids` names its `findings[].id`. |
+| `negative` | the surface was in scope and examined, and nothing was found. The note names the files or call sites checked. |
+| `out_of_scope` | `--diff` only: the diff does not touch the surface. |
+| `not_applicable` | the surface does not exist in the target. |
+| `not_assessed` | the surface was in scope but not examined (budget, truncation). |
+
+```json
+"review_surface_coverage": {
+  "credential-acceptance": {"status": "out_of_scope", "note": "diff does not touch authentication"},
+  "ownership-resolution": {"status": "out_of_scope", "note": "no lookup by owner in the diff"},
+  "security-flags": {"status": "negative", "note": "settings.py: new DEBUG_SIGNUP flag read in 2 places, neither disables a control"},
+  "outbound-fetch": {"status": "finding", "finding_ids": ["EXAMPLE_REPO-abc1234-001"]},
+  "stored-content-integrity": {"status": "not_applicable", "note": "no content-addressed store"},
+  "scope-enforcement": {"status": "out_of_scope", "note": "no route or guard changes"}
+}
+```
+
+A full (non-diff) scan never uses `out_of_scope`. `/track-findings` merges
+the record into the repo's `*-findings-current.json`: a `finding` or
+`negative` from this scan updates the current record, while
+`out_of_scope`, `not_applicable` and `not_assessed` leave it as it was.
+
 **Validation gate.** The scan is not complete until the deterministic
 validator passes (`contracts/schemas/vuln-findings.schema.json` is auto-detected from
 the filename; it machine-enforces id derivation from
