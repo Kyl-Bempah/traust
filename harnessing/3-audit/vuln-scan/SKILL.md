@@ -112,7 +112,7 @@ it is not part of this harness and must be installed separately.
 **Paths:** `<skill-base>` is this skill's base directory (injected by the
 runtime as "Base directory for this skill"; it is
 `traust/harnessing/3-audit/vuln-scan`). `<harness>` is the
-traust repo root, i.e. `<skill-base>/../..`. Resolve both to
+traust repo root, i.e. `<skill-base>/../../..`. Resolve both to
 absolute paths once at startup. Bash `git` is permitted ONLY for read-only
 provenance queries (`git -C <harness> rev-parse --short HEAD`,
 `git -C <target-dir> rev-parse --short HEAD`,
@@ -177,7 +177,7 @@ Run the deterministic resolver (it routes attention only — it never
 authors a finding):
 
 ```bash
-python3 <skill-base>/resolve_baseline.py <target-dir> \
+python3 <skill-base>/scripts/resolve_baseline.py <target-dir> \
     [--db <workspace>/analysis-results/graph/findings.db] \
     [--since <commit>] [--baseline <audit.json>] \
     --out /tmp/<repo>-diff-scope.json
@@ -216,7 +216,7 @@ review agents judge (this replaces the manual symbol-index build/query
 choreography — the builder runs it for you):
 
 ```bash
-python3 <skill-base>/build_diff_packet.py \
+python3 <skill-base>/scripts/build_diff_packet.py \
     --scope /tmp/<repo>-diff-scope.json \
     --out /tmp/<repo>-diff-packet.json
 ```
@@ -312,7 +312,7 @@ makes every diff-scoped report auditable for what it diffed against.
 ```json
 "spend": {
   "skill": "vuln-scan", "mode": "diff",
-  "model": "<resolved via python3 -m traust.cli registry models resolve>",
+  "model": "<python3 -m traust.cli registry models resolve vuln-scan>",
   "tokens_in": 0, "tokens_out": 0, "usd": null, "subagents": 0
 }
 ```
@@ -411,6 +411,11 @@ sink (launch/bulk/schedule/copy; REST/websocket/callback), and
 targets ≥ ~50 kLoC add one **shadow lane**: a subsystem-scoped
 depth-first subagent with no vulnerability-class checklist, merged
 through the same triage bar.
+
+**Model routing.** Run the scan, and every review and scoring subagent, on
+the model `python3 -m traust.cli registry models resolve vuln-scan` returns
+(the `vuln-scan` role, floor `opus-class`). Never name a model ID in the
+brief.
 
 Unless `--single`, spawn **one Task subagent per focus area** in parallel.
 Cap at 10 concurrent. Each subagent gets the review brief below with its
@@ -958,7 +963,7 @@ progress-tracker/metrics/estimate-calibration-analysis.md §F5):
 
 ```bash
 python3 -m traust.cli registry models spend --skill vuln-scan \
-    --model <resolved model id> [--tokens-in <N>] [--tokens-out <N>] \
+    --model <python3 -m traust.cli registry models resolve vuln-scan> [--tokens-in <N>] [--tokens-out <N>] \
     --repo <target-slug> --loc <target size, if known> [--batch <batch-id>]
 ```
 

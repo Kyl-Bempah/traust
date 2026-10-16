@@ -130,6 +130,16 @@ roles:
     approved: [claude-opus-4-8, claude-mythos-5]
     candidates: []
     ledger_validity_writer: false
+  vuln-scan:
+    floor: opus-class
+    approved: [claude-opus-4-8, claude-mythos-5]
+    candidates: []
+    ledger_validity_writer: false
+    claude_code_only: [subagent-fanout]
+    note: /vuln-scan static review, full or --diff. Its new findings enter
+      the ledger as arrivals (resolution open, validity unstated), so the
+      role writes no validity. Floor set 2026-10-16 (owner decision),
+      separate from deep-audit so scan cost tunes on its own.
   render-narrate:
     floor: haiku-class
     approved: [claude-haiku-4-5-20251001, claude-sonnet-5, claude-opus-4-8]

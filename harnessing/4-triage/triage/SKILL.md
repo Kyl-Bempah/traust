@@ -79,7 +79,7 @@ not stable across runtimes):
 **Paths:** `<skill-base>` is this skill's base directory (injected by the
 runtime as "Base directory for this skill"; it is
 `traust/harnessing/4-triage/triage`). `<harness>` is the
-traust repo root, i.e. `<skill-base>/../..`. Resolve both to
+traust repo root, i.e. `<skill-base>/../../..`. Resolve both to
 absolute paths once at startup and use them verbatim in every Bash call.
 
 **Tools:** Read, Glob, Grep, Write, Task, AskUserQuestion. Bash is

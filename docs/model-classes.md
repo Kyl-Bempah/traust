@@ -47,7 +47,7 @@ python3 -m traust.cli registry models resolve <role>
 python3 -m traust.cli registry models resolve <role> --tier opus-class   # escalated
 ```
 
-The eleven roles, their floors, and whether the role may write a validity
+The twelve roles, their floors, and whether the role may write a validity
 verdict into the disposition ledger:
 
 | Role | Floor | Writes ledger validity? |
@@ -61,6 +61,7 @@ verdict into the disposition ledger:
 | `patch-reviewer` | `mythos-class` | no |
 | `remediation` | `mythos-class` | no |
 | `fuzz-author` | `opus-class` | no |
+| `vuln-scan` | `opus-class` | no |
 | `fact-judge` | `sonnet-class` | no |
 | `render-narrate` | `haiku-class` | no |
 
@@ -206,17 +207,17 @@ from those two tables rather than maintained separately, so they cannot
 disagree with them; a docs-gate check enforces that. The four skills with no
 documented class are listed at the end with the role that governs them.
 
-### `mythos-class` — 17 skill(s)
+### `mythos-class` — 16 skill(s)
 
 Audits, threat models, triage, validation, remediation, verification — the roles that write ledger validity, or author and review patches.
 
-`compliance-check` · `crypto-analysis` · `insecure-patterns` · `isolation-review` · `patch` · `pqc-readiness` · `recall-benchmark` · `remediate-finding` · `secure-code-audit` · `secure-rpm-audit` · `security-audit-phased` · `threat-model` · `triage` · `validate-browser-finding` · `validate-findings` · `verify-remediation` · `vuln-scan`
+`compliance-check` · `crypto-analysis` · `insecure-patterns` · `isolation-review` · `patch` · `pqc-readiness` · `recall-benchmark` · `remediate-finding` · `secure-code-audit` · `secure-rpm-audit` · `security-audit-phased` · `threat-model` · `triage` · `validate-browser-finding` · `validate-findings` · `verify-remediation`
 
-### `opus-class` — 25 skill(s)
+### `opus-class` — 26 skill(s)
 
 Orchestration, inventory, graphs, dashboards and rollups: work whose failure mode is a rerun, not a bad security decision.
 
-`add-inputs` · `attack-coverage` · `census` · `cloud-config-audit` · `corpus-intake` · `countersign` · `dependency-watch` · `financial-tracking` · `findings-db` · `fleet-fix` · `generate-team-report` · `impact-analysis` · `inventory-repositories` · `mine-ledger` · `operator-priv-profile` · `portfolio-graph` · `property-test` · `rbac-tenancy-rollup` · `repo-graph` · `secure-container-audit` · `sla-view` · `threat-register` · `track-findings` · `traust-metrics` · `validation-fuzz-dashboard`
+`add-inputs` · `attack-coverage` · `census` · `cloud-config-audit` · `corpus-intake` · `countersign` · `dependency-watch` · `financial-tracking` · `findings-db` · `fleet-fix` · `generate-team-report` · `impact-analysis` · `inventory-repositories` · `mine-ledger` · `operator-priv-profile` · `portfolio-graph` · `property-test` · `rbac-tenancy-rollup` · `repo-graph` · `secure-container-audit` · `sla-view` · `threat-register` · `track-findings` · `traust-metrics` · `validation-fuzz-dashboard` · `vuln-scan`
 
 ### `sonnet-class` — 6 skill(s)
 
