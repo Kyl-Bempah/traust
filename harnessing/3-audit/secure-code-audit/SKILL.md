@@ -962,6 +962,23 @@ artifact lists (key, effective default, consuming sink) triples;
 `judgement_required: true` marks the TLS/DSN/auth/listener/debug/secret
 classes, with `weak_default: true` ordering the worklist.
 
+Python settings are expanded too (the `python-settings` tier): literals in
+settings modules (`settings*.py`, `config*.py`, `conf.py`) and in settings
+classes (Flask-style `ProductionConfig`, pydantic `BaseSettings`), parsed and
+never imported.
+- Test toggles (`TESTING`), CSRF and signature-verification switches are
+  judged with the debug and auth classes.
+- Each triple's sink lists the setting's **readers**. Read every one: the
+  worst reader sets the severity (`review-surfaces.md` → `security-flags`).
+  `unresolved` means no reader in this tree, not an unused setting: the
+  framework itself reads most of them (Django's `DEBUG`, `SECRET_KEY`,
+  `ALLOWED_HOSTS`), so judge those by the framework's documented behaviour.
+- A hardcoded credential default (a secret-shaped name, or a URL with an
+  embedded password) is a `weak_default`, reported as
+  `<hardcoded literal, N chars>` or with the password masked, and marked
+  `literal_redacted`. The value is never copied into the artifact, so
+  never copy it into the report either; cite the source line instead.
+
 Judging protocol — bounded, and every verdict is judged, never bulk-set:
 
 1. **Judge every `judgement_required` triple**, weak defaults first. For
