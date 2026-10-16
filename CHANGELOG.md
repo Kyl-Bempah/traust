@@ -11,8 +11,17 @@ All notable changes to Traust are documented here.
     stays under Network.
   - Entry points those rows produce are tagged with `review_surfaces`.
   - Stage 4's gap-fill walks each tagged surface's check from
-    `review-surfaces.md`, alongside STRIDE and the infra/IAM walk, and adds
-    plausible answers as tagged section 4 rows.
+    `review-surfaces.md`, alongside STRIDE and the infra/IAM walk. Each
+    plausible answer becomes a section 4 row tagged with the surfaces it
+    exercises; a check that finds nothing goes in section 5 with the reason.
+  - Each new row names the tag it produces. `scope-enforcement` goes on
+    Network entry points behind a role, scope or permission check. Outbound
+    fetch means server-side requests only. The Surface-mapper Returns shape
+    and the checkpoint templates carry `review_surfaces`.
+- **`/secure-code-audit` reads the threat model's review-surface tags from
+  its JSON** (`<repo>-threat-model.json`, which only the JSON carries). Each
+  surface the model tags must end `finding` or `negative`, or `not_assessed`
+  with its gap, never `not_applicable`.
 - **The `/vuln-scan` review brief checks the review surfaces.**
   - "WHAT TO LOOK FOR" gains a REVIEW SURFACES group, one line per surface.
     A shipped default that switches a control off is reportable even though
