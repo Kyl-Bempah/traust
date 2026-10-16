@@ -36,6 +36,9 @@ All notable changes to Traust are documented here.
 - The method companion `review-surfaces.md` documents `out_of_scope`, the
   scan records, the merge and the threat-model tags; `/track-findings` and
   `docs/report-structure.md` link it.
+- `/vuln-scan`'s diff-mode dispatch note no longer carries a deployment's
+  pilot cost figures; dispatch stays an operator decision with no fixed cost
+  gate.
 
 ## [0.20.2]
 
