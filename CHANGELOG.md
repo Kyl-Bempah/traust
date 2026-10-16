@@ -7,7 +7,7 @@ All notable changes to Traust are documented here.
 - **Model registry updated to the current Anthropic lineup** (published rate
   card, checked 2026-10-16).
   - **Mythos 5.1 replaces Mythos 5** in every role that approved it: all
-    nine `mythos-class` roles, plus the mythos escalation entries in
+    eight `mythos-class` roles, plus the mythos escalation entries in
     `fact-judge`, `fuzz-author` and `vuln-scan`. Mythos 5.1 is a
     limited-availability model, so a deployment without access to it can no
     longer resolve those roles.
