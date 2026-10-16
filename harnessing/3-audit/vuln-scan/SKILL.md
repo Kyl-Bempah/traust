@@ -165,17 +165,11 @@ flow**; anything not mentioned here (fan-out mechanics, review brief,
 collation, confidence pass, validation gate, hand-back, Constraints) is
 inherited unchanged.
 
-**Fleet dispatch is an operator decision, informed by measured cost**
-(operator clarification 2026-07-27 — the plan's $5 figure was a
-pre-pilot reference target, never a hard gate). Measured base rates:
-the 50-repo pilot ran **$6.67/run** median pre-packet; the
-context-packet re-pilot (Step 0b, same repos) ran **$4.73 (−29%)**;
-drain tranche 1's heavy mix ran $6.24 with refusals at $0.81 — vs
-~$27 median for the full-audit lane this substitutes. The pilot's
-~32% resolver-refusal rate is pre-routed away at the router
-(`build_rescan_worklist.py` refusal pre-route). Individual runs need
-no approval; batch/drain dispatch is scheduled by the operator
-(docs/continuous-operations.md, trickle-drain).
+**Fleet dispatch is an operator decision, informed by the deployment's
+measured cost per run.** There is no fixed cost gate. Diffs the resolver
+would refuse are pre-routed away at the router (`build_rescan_worklist.py`
+refusal pre-route). Individual runs need no approval; batch/drain dispatch
+is scheduled by the operator (docs/continuous-operations.md, trickle-drain).
 
 ### Step 0 (replaces recon) — resolve the baseline and scope package
 
