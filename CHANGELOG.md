@@ -2,6 +2,14 @@
 
 All notable changes to Traust are documented here.
 
+## [0.20.2]
+
+- **Pins traust-engine 0.25.2** (`87a94fc`). `traust reporting validate`
+  directory sweeps skip hidden directories (`.triage-state/`,
+  `.threat-model-state/` and similar). The fingerprint, repository and strict
+  checks run only on a report-shaped document: before this, a skill working
+  file aborted the sweep for its whole directory with a traceback.
+
 ## [0.20.1]
 
 - **Pins traust-contracts 0.57.0** (`4e900e7`), with traust-ledger and
