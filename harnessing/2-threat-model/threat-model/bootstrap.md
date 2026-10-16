@@ -189,7 +189,7 @@ language/framework the target actually uses.
 | Credential verification / minting (`credential-acceptance`) | token verify or decode calls (e.g., `jwt.decode`); password and hash comparisons; session lookups; token signing and refresh or exchange endpoints |
 | Ownership resolution (`ownership-resolution`) | lookups that tie an object to its owner by name rather than key (e.g., `LIKE`/`ILIKE` or prefix match on a name column) |
 | Security config flags (`security-flags`) | settings defaults and environment fallbacks that switch a control (e.g., `DEBUG`, `verify=`, `insecure`/`skip_*` options); keys or secrets in shipped config |
-| Outbound fetch (`outbound-fetch`) | server-side HTTP client calls whose destination comes from input or stored config (e.g., `requests.get(`); identity-provider discovery and key-set URLs; redirects the server follows. Links and redirects a user's browser follows are not outbound fetches. |
+| Outbound fetch (`outbound-fetch`) | server-side HTTP client calls whose destination someone other than the operator can influence: request input, config a lower-privileged role can edit, a value read from an unverified token (e.g., `requests.get(`); identity-provider discovery and key-set URLs; redirects the server follows. A destination only the operator sets, and links a user's browser follows, are not outbound fetches. |
 | Shared content stores (`stored-content-integrity`) | digest-keyed or deduplicated blob storage; multipart or chunk assembly; server-side copy |
 
 The last five rows are review surfaces from
@@ -197,7 +197,8 @@ The last five rows are review surfaces from
 the tag each one produces is in brackets. Tag every entry point those rows
 produce with `review_surfaces`. The sixth surface, `scope-enforcement`, has no
 row of its own: tag a Network entry point with it when the route sits behind
-a role, scope or permission check, or should. Stage 4 walks every tagged
+a role, scope or permission check, or when it acts on another user's data or
+performs a privileged operation without one. Stage 4 walks every tagged
 surface, and the audit's coverage diff reads the tags from the JSON.
 
 **Checkpoint:** Write tool → `./.threat-model-state/_chunk.tmp`:
@@ -432,9 +433,11 @@ misses the classic defects, so also walk each tagged surface's check in
   scope check its siblings do?
 
 Each plausible answer is a section 4 row tagged with only the surfaces
-that threat exercises, a subset of its entry point's tags. A check that turns
-up nothing goes in `## 5. Deprioritized` with the reason (for example,
-"stored-content-integrity: no content-addressed or deduplicated store").
+that threat exercises: a subset of the tags of the entry points its
+`surface` names (their union, when it names several). A check on a tagged
+surface that turns up nothing goes in `## 5. Deprioritized` with the reason
+(for example, "outbound-fetch on the proxy: the destination host is set only
+by the operator"). Untagged surfaces need no section 5 line.
 
 **LINDDUN privacy overlay (conditional).** If section 2 contains
 personal-data assets (PII, user records, identifiers, behavioral/audit
