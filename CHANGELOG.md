@@ -2,6 +2,18 @@
 
 All notable changes to Traust are documented here.
 
+## [0.23.0]
+
+- **`fact-judge` prefers Sonnet 5.5** (`claude-sonnet-5-5` first, then
+  `claude-sonnet-5`). The price is the same, and cache reads cost half as much.
+- **`render-narrate` prefers Haiku 5.5** (`claude-haiku-5-5` first, then
+  `claude-haiku-4-5-20251001`), at a tenth of Haiku 4.5's price. Prompts over
+  100k tokens bill at $0.50/$2.50, which the registry's one price per model
+  doesn't record, so spend on long prompts is understated.
+- **Fable 5.1 is a candidate on every `mythos-class` role**
+  (`candidates: [claude-fable-5-1]`). It awaits evals against Mythos 5.1 and
+  changes no routing until it's approved.
+
 ## [0.22.0]
 
 - **Model registry updated to the current Anthropic lineup** (published rate

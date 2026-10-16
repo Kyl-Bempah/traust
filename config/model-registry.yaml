@@ -72,25 +72,25 @@ roles:
   deep-audit:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: true
     claude_code_only: [subagent-fanout]
     evals: {benchmarked_on: null, note: "recall-slice floors set empirically (v0.144.0)"}
   threat-model:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: false
   triage-verifier:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: true
     claude_code_only: [subagent-fanout]
     note: heterogeneous-panel pilot (one non-Anthropic voter) is M3 Pilot 1
   fact-judge:
     floor: sonnet-class
-    approved: [claude-sonnet-5, claude-opus-5-5, claude-opus-5, claude-opus-4-8, claude-mythos-5-1]
+    approved: [claude-sonnet-5-5, claude-sonnet-5, claude-opus-5-5, claude-opus-5, claude-opus-4-8, claude-mythos-5-1]
     candidates: []
     ledger_validity_writer: false
     note: deterministic facts bound the blast radius; per-rule precision is
@@ -98,7 +98,7 @@ roles:
   patch-author:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: false
     note: floor raised from opus-class 2026-07-31 (user directive) —
       patching defaults to mythos; README minimum-viable already said
@@ -106,14 +106,14 @@ roles:
   patch-reviewer:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: false
     note: floor raised from opus-class 2026-07-31 (user directive),
       same batch as patch-author
   validation-planner:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: true
     claude_code_only: [subagent-fanout, effort-control]
     note: scope-guard-critical; cross-vendor forbidden until two consecutive
@@ -121,14 +121,14 @@ roles:
   remediation:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: false
     note: floor raised from opus-class 2026-07-31 (user directive),
       same batch as patch-author
   verification-verdict:
     floor: mythos-class
     approved: [claude-mythos-5-1]
-    candidates: []
+    candidates: [claude-fable-5-1]
     ledger_validity_writer: true
   fuzz-author:
     floor: opus-class
@@ -147,7 +147,7 @@ roles:
       separate from deep-audit so scan cost tunes on its own.
   render-narrate:
     floor: haiku-class
-    approved: [claude-haiku-4-5-20251001, claude-sonnet-5, claude-opus-5-5, claude-opus-5, claude-opus-4-8]
+    approved: [claude-haiku-5-5, claude-haiku-4-5-20251001, claude-sonnet-5, claude-opus-5-5, claude-opus-5, claude-opus-4-8]
     candidates: []
     ledger_validity_writer: false
     note: dashboards, rollup prose, inventory routing, Jira sync — first
