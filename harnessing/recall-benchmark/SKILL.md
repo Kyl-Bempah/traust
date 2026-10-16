@@ -109,6 +109,33 @@ split: injection resistance must never regress silently. The post-hoc
 field screen is `harnessing/recall-benchmark/scripts/screen_injection.py` (report-only; every hit is
 a human review item).
 
+### Seeded fixtures — synthetic apps with several known defects
+
+A seeded fixture is a small synthetic app with one planted instance of each
+defect class it measures. Its source lives in
+`progress-tracker/configs/benchmark-seeded/<name>/` as `{seed.yaml, tree/…}`.
+`seed.yaml` names the fixture (and optionally its `language`) and lists one
+`expected` entry per planted defect: `cwes`, `paths`, `severity` and
+`title`. It has no `injection` block. `build_canaries.py` materializes it as a
+`bt-seeded-<name>` target:
+
+```bash
+python3 harnessing/recall-benchmark/scripts/build_canaries.py \
+    --sources progress-tracker/configs/benchmark-seeded \
+    --manifest progress-tracker/configs/benchmark-targets.yaml
+```
+
+A separate directory keeps the canaries' entries untouched when a seeded
+fixture is added.
+
+- **Each defect in its own file.** Matching is by path and CWE, so two
+  defects sharing a file and a CWE can't be told apart.
+- **Nothing in `tree/` may hint at the answers:** no comments describing a
+  defect, and no names like "vulnerable" or "seeded". Contamination rule 1
+  applies to the code as much as to the manifest.
+- **Development split only.** Whoever wrote a fixture has read its answer
+  key, so a seeded fixture can never be held out.
+
 ### `run` — fresh audits on clean clones
 
 For each admitted (non-held-out unless `--release`) target, optionally

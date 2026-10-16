@@ -13,6 +13,12 @@ Canary targets are always development split (held_out=false): their whole
 purpose is to be watched continuously, and injection resistance must never
 regress silently between releases.
 
+The same sources directory may also hold SEEDED FIXTURES: {seed.yaml,
+tree/...}. A seed.yaml has no injection block and lists one expected finding
+per seeded defect; it becomes a `bt-seeded-<name>` target. Seeded fixtures
+are development split too: whoever wrote one has read its answer key, so it
+can never be held out.
+
 CLI:
     python3 harnessing/recall-benchmark/scripts/build_canaries.py \
         --sources <benchmark-canaries dir> \
@@ -64,10 +70,28 @@ def materialize(src: Path, repos_dir: Path) -> tuple[str, Path]:
     return sha, dest
 
 
-def target_entry(meta: dict, sha: str, repo_path: Path, source_rel: str) -> dict:
-    exp = meta["expected"]
+#: answer-key file name -> target id prefix
+ANSWER_KEYS = {"canary.yaml": "bt-canary-", "seed.yaml": "bt-seeded-"}
+
+
+def _expected(exp: dict) -> dict:
     return {
-        "id": f"bt-canary-{meta['name']}",
+        "source_finding": "",
+        "fingerprint": None,  # matched at tier 2 (path+CWE) by design
+        "cwes": [str(c).upper() for c in exp["cwes"]],
+        "paths": list(exp["paths"]),
+        "severity": exp["severity"],
+        "title": exp.get("title", "")[:200],
+    }
+
+
+def target_entry(
+    meta: dict, sha: str, repo_path: Path, source_rel: str, prefix: str = "bt-canary-"
+) -> dict:
+    expected = meta["expected"]
+    expected = expected if isinstance(expected, list) else [expected]
+    entry = {
+        "id": f"{prefix}{meta['name']}",
         "repo_url": f"file://{repo_path}",
         "fix_commit": None,
         "pre_fix_sha": sha,
@@ -75,28 +99,23 @@ def target_entry(meta: dict, sha: str, repo_path: Path, source_rel: str) -> dict
         "evidence": {
             "kind": "seed_recipe",
             "ref": source_rel,
-            "excerpt": exp.get("title", "")[:600],
+            "excerpt": "; ".join(e.get("title", "") for e in expected)[:600],
         },
         "embargo": "internal",
         "held_out": False,
         "admitted": True,
         "admitted_by": "build_canaries.py (seeded corpus — recipe is the admission evidence)",
         "admitted_at": datetime.date.today().isoformat(),
-        "injection": {
+        "expected": [_expected(e) for e in expected],
+    }
+    if meta.get("language"):
+        entry["language"] = meta["language"]
+    if meta.get("injection"):
+        entry["injection"] = {
             "class": meta["injection"]["class"],
             "tokens": list(meta["injection"]["tokens"]),
-        },
-        "expected": [
-            {
-                "source_finding": "",
-                "fingerprint": None,  # matched at tier 2 (path+CWE) by design
-                "cwes": [str(c).upper() for c in exp["cwes"]],
-                "paths": list(exp["paths"]),
-                "severity": exp["severity"],
-                "title": exp.get("title", "")[:200],
-            }
-        ],
-    }
+        }
+    return entry
 
 
 def main(argv=None) -> int:
@@ -121,28 +140,46 @@ def main(argv=None) -> int:
 
     built = 0
     for src in sorted(args.sources.iterdir()):
-        if not (src / "canary.yaml").is_file():
+        keys = [k for k in ANSWER_KEYS if (src / k).is_file()]
+        if not keys:
             continue
-        meta = yaml.safe_load((src / "canary.yaml").read_text())
-        if (src / "tree" / "canary.yaml").exists():
+        if len(keys) > 1:
+            sys.exit(f"{src.name}: both canary.yaml and seed.yaml — use one answer key")
+        key = keys[0]
+        meta = yaml.safe_load((src / key).read_text())
+        leaked = [k for k in ANSWER_KEYS if any((src / "tree").rglob(k))]
+        if leaked:
             sys.exit(
-                f"{src.name}: canary.yaml inside tree/ — the answer "
+                f"{src.name}: {', '.join(leaked)} inside tree/ — the answer "
                 f"key must never enter the materialized repo"
             )
         sha, repo_path = materialize(src, args.repos_dir)
-        entry = target_entry(meta, sha, repo_path, str(src.relative_to(args.sources.parent)))
+        entry = target_entry(
+            meta,
+            sha,
+            repo_path,
+            str(src.relative_to(args.sources.parent)),
+            ANSWER_KEYS[key],
+        )
         if entry["id"] in by_id:
             manifest["targets"][by_id[entry["id"]]] = entry
         else:
             manifest["targets"].append(entry)
         built += 1
-        print(f"{entry['id']}: {meta['injection']['class']} @ {sha[:10]} -> {repo_path}")
+        kind = (
+            meta["injection"]["class"]
+            if meta.get("injection")
+            else f"{len(entry['expected'])} seeded"
+        )
+        print(f"{entry['id']}: {kind} @ {sha[:10]} -> {repo_path}")
 
     manifest["updated"] = datetime.date.today().isoformat()
     if args.dry_run:
         print(f"[dry-run] {built} canaries built; manifest not written")
         return 0
-    args.manifest.write_text(yaml.safe_dump(manifest, sort_keys=False, width=100), encoding="utf-8")
+    args.manifest.write_text(
+        yaml.safe_dump(manifest, sort_keys=False, width=100, allow_unicode=True), encoding="utf-8"
+    )
     print(f"{built} canaries materialized; manifest updated: {args.manifest}")
     return 0
 
