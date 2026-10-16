@@ -2,6 +2,26 @@
 
 All notable changes to Traust are documented here.
 
+## [0.24.0]
+
+- **Per-model cache rates and per-request long-prompt pricing.** Pins
+  traust-contracts 0.59.0, traust-ledger and traust-engine 0.27.0.
+  - **Cache rates:** `config/model-registry.yaml` sets
+    `cache_read_multiplier` 0.05 for Opus 5.5 and Sonnet 5.5, and 0.025 for
+    Mythos 5.1 and Fable 5.1, per the published rate card. Every other model
+    keeps the standard 0.1.
+  - **Haiku 5.5 long prompts:** `claude-haiku-5-5` gets a `long_prompt` tier.
+    A request whose prompt (input, cache reads and cache writes) is over 100k
+    tokens is priced at $0.50/$2.50.
+  - **Financial report:** `build_financial_report`'s transcript collector
+    splits long-prompt requests out per request (`collect_spend.add_usage`),
+    and both of its pricing paths pass the split through.
+  - **Effect:** this workspace's October 2026 Claude Code spend, priced from
+    the registry, drops from $1,094.52 to $791.65 (−27.7%), all of it from
+    Opus 5.5 cache reads.
+- **`out_of_scope` only on diff scans.** The pinned engine rejects an
+  `out_of_scope` review-surface entry on a vuln-findings report without
+  `metadata.additional.coverage_diff`.
 ## [0.23.1]
 
 - **`render-narrate` escalates to Sonnet 5.5.** `claude-sonnet-5-5` now comes

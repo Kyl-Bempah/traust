@@ -45,20 +45,20 @@ providers:
     # Billing channel confirmed 2026-07-28: Anthropic first-party API
     # for Claude Code campaign work (CLAUDE_CODE_USE_VERTEX disabled;
     # the VERTEXAI_PROJECT env var serves the user's OTHER Vertex work
-    # and says nothing about this channel). cache_read ~0.1x input;
+    # and says nothing about this channel). cache_read 0.1x input unless the model sets cache_read_multiplier;
     # cache_write ~1.25x input (5-min TTL; 1-hour TTL is ~2x).
     models:
-      claude-mythos-5-1:      {tier: mythos-class, batch_eligible: true,  price_per_mtok_in: 10.0, price_per_mtok_out: 50.0}  # added 2026-10-16 from the published rate card (limited availability); cache reads 0.025x input
+      claude-mythos-5-1:      {tier: mythos-class, batch_eligible: true,  price_per_mtok_in: 10.0, price_per_mtok_out: 50.0, cache_read_multiplier: 0.025}  # added 2026-10-16 from the published rate card (limited availability); cache read rate in cache_read_multiplier
       claude-mythos-5:        {tier: mythos-class, batch_eligible: true,  price_per_mtok_in: 10.0, price_per_mtok_out: 50.0}  # same rate card as claude-fable-5
-      claude-fable-5-1:       {tier: mythos-class, batch_eligible: true,  price_per_mtok_in: 10.0, price_per_mtok_out: 50.0}  # added 2026-10-16 from the published rate card; cache reads 0.025x input
+      claude-fable-5-1:       {tier: mythos-class, batch_eligible: true,  price_per_mtok_in: 10.0, price_per_mtok_out: 50.0, cache_read_multiplier: 0.025}  # added 2026-10-16 from the published rate card; cache read rate in cache_read_multiplier
       claude-fable-5:         {tier: mythos-class, batch_eligible: true,  price_per_mtok_in: 10.0, price_per_mtok_out: 50.0}  # same rate card as claude-mythos-5; added 2026-07-28 so downstream rate-card consumers read the registry instead of hand-copying it
-      claude-opus-5-5:        {tier: opus-class,   batch_eligible: true,  price_per_mtok_in: 4.0,  price_per_mtok_out: 20.0}  # added 2026-10-16 from the published rate card; cache reads 0.05x input
+      claude-opus-5-5:        {tier: opus-class,   batch_eligible: true,  price_per_mtok_in: 4.0,  price_per_mtok_out: 20.0, cache_read_multiplier: 0.05}  # added 2026-10-16 from the published rate card; cache read rate in cache_read_multiplier
       claude-opus-5:          {tier: opus-class,   batch_eligible: true,  price_per_mtok_in: 5.0,  price_per_mtok_out: 25.0}  # corrected 2026-08-06 from 15/75 (stale Opus 4.1-era rate) to the published 5/25 — same bug already fixed for opus-4-8 below; verified against docs models overview. Overstated 2026-07 spend by ~$61K
       claude-opus-4-8:        {tier: opus-class,   batch_eligible: true,  price_per_mtok_in: 5.0,  price_per_mtok_out: 25.0}  # corrected from 15/75 (Opus 4.1-era rate) to published 5/25
       claude-opus-4-6:        {tier: opus-class,   batch_eligible: true,  price_per_mtok_in: 5.0,  price_per_mtok_out: 25.0}  # on the published rate card at 5/25 (checked 2026-10-16)
-      claude-sonnet-5-5:      {tier: sonnet-class, batch_eligible: true,  price_per_mtok_in: 2.0,  price_per_mtok_out: 10.0}  # added 2026-10-16 from the published rate card; cache reads 0.05x input
+      claude-sonnet-5-5:      {tier: sonnet-class, batch_eligible: true,  price_per_mtok_in: 2.0,  price_per_mtok_out: 10.0, cache_read_multiplier: 0.05}  # added 2026-10-16 from the published rate card; cache read rate in cache_read_multiplier
       claude-sonnet-5:        {tier: sonnet-class, batch_eligible: true,  price_per_mtok_in: 2.0,  price_per_mtok_out: 10.0}  # corrected 2026-10-16 from 3/15: the 2/10 launch price became the standard price
-      claude-haiku-5-5:       {tier: haiku-class,  batch_eligible: true,  price_per_mtok_in: 0.1,  price_per_mtok_out: 0.5}  # added 2026-10-16; prompts over 100k tokens bill at 0.50/2.50, which one price per model cannot express
+      claude-haiku-5-5:       {tier: haiku-class,  batch_eligible: true,  price_per_mtok_in: 0.1,  price_per_mtok_out: 0.5, long_prompt: {above_tokens: 100000, price_per_mtok_in: 0.5, price_per_mtok_out: 2.5}}  # added 2026-10-16; prompts over 100k tokens (input, cache reads and cache writes) bill at the long_prompt rates
       claude-haiku-4-5-20251001: {tier: haiku-class, batch_eligible: true, price_per_mtok_in: 1.0, price_per_mtok_out: 5.0}
   # New vendors: data-handling + licensing intake FIRST (docs/
   # external-dependencies.md), then eval-gated promotion (M3). Cost never
