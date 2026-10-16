@@ -163,7 +163,7 @@ worth the overhead there.
 | Agent | Brief | Returns |
 |---|---|---|
 | **Docs reader** | Read `README*`, `SECURITY.md`, `CHANGELOG*`, top-level `docs/`, and the build manifest (`setup.py` / `Cargo.toml` / `package.json` / `CMakeLists.txt`). Summarize what the project says it is, who uses it, and any security claims or fix entries it documents. | Prose system description; list of self-documented security fixes. |
-| **Surface mapper** | Grep the source tree for entry-point signatures (table below). For each hit, name the surface, the file:function, and what crosses it. Include supply-chain surfaces (lockfiles, vendored deps, `curl \| sh` in build scripts). Bound the scan: exclude `vendor/`, `node_modules/`, `third_party/`, generated code; cap at ~5 representative hits per surface row. | Candidate section 3 rows: `{entry_point, description, trust_boundary, file_refs}`. |
+| **Surface mapper** | Grep the source tree for entry-point signatures (table below). For each hit, name the surface, the file:function, and what crosses it. Include supply-chain surfaces (lockfiles, vendored deps, `curl \| sh` in build scripts). Bound the scan: exclude `vendor/`, `node_modules/`, `third_party/`, generated code; cap at ~5 representative hits per surface row. | Candidate section 3 rows: `{entry_point, description, trust_boundary, file_refs, review_surfaces}` (`review_surfaces` only on rows from the review-surface kinds below). |
 | **Infra reader** | Read deploy-time config: `*.tf`/`*.tfvars`, k8s manifests (`*.yaml` under `k8s/`/`deploy/`/`manifests/`), `Dockerfile*`, CI workflows, and any IAM/service-account/dataset-ACL files. For each, name (a) the identity it runs as and what that identity can reach, (b) any access grant not managed in this tree (ad-hoc IAM, hand-created SAs, missing column/policy tags), (c) credentials or principals that survive a migration or teardown. | Candidate section 3 rows for infra surfaces + candidate section 4 rows: `{threat, surface, asset}` where the config itself is the finding. |
 | **Asset finder** | Identify what the code protects or produces: sensitive data it reads/writes (secrets, keys, user records, DBs), process integrity (always present for native code), service availability, and downstream embedder assets if it's a library. | Candidate section 2 rows: `{asset, description, sensitivity}`. |
 | **History miner** | Two steps. **(a)** Glance at the build manifest and file extensions to identify language **and domain**, then derive 6-10 commit-message keywords specific to that stack on top of the base set `CVE- security vuln fix exploit`. Derive from what the code does, not from a lookup table; the three examples below illustrate the specificity bar, not coverage: native parser → `overflow OOB UAF integer`; web service → `injection SSRF IDOR traversal`; crypto → `timing constant-time nonce`. **(b)** `git -C <target-dir> log --all -i --grep='<base ∪ derived, \|-joined>' --oneline`, then read the full message + diff of each hit. Also grep any `issues/` or `bugs/` export in-tree. | Vuln rows: `{id (commit hash), title, component, class, vector}`. |
@@ -186,6 +186,20 @@ language/framework the target actually uses.
 | IPC / plugins | dynamic load (e.g., `dlopen`); subprocess spawn; `eval`/`exec` on config; dynamic import |
 | Supply chain | dependency lockfiles; vendored libs; `curl \| sh` in build scripts |
 | Infra / IAM | terraform `google_*_iam_*`/`aws_iam_*`; k8s `serviceAccountName`/WIF annotations; BigQuery dataset/table `access{}` blocks; secrets mounts |
+| Credential verification / minting (`credential-acceptance`) | token verify or decode calls (e.g., `jwt.decode`); password and hash comparisons; session lookups; token signing and refresh or exchange endpoints |
+| Ownership resolution (`ownership-resolution`) | lookups that tie an object to its owner by name rather than key (e.g., `LIKE`/`ILIKE` or prefix match on a name column) |
+| Security config flags (`security-flags`) | settings defaults and environment fallbacks that switch a control (e.g., `DEBUG`, `verify=`, `insecure`/`skip_*` options); keys or secrets in shipped config |
+| Outbound fetch (`outbound-fetch`) | server-side HTTP client calls whose destination someone other than the operator can influence: request input, config a lower-privileged role can edit, a value read from an unverified token (e.g., `requests.get(`); identity-provider discovery and key-set URLs; redirects the server follows. A destination only the operator sets, and links a user's browser follows, are not outbound fetches. |
+| Shared content stores (`stored-content-integrity`) | digest-keyed or deduplicated blob storage; multipart or chunk assembly; server-side copy |
+
+The last five rows are review surfaces from
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md);
+the tag each one produces is in brackets. Tag every entry point those rows
+produce with `review_surfaces`. The sixth surface, `scope-enforcement`, has no
+row of its own: tag a Network entry point with it when the route sits behind
+a role, scope or permission check, or when it acts on another user's data or
+performs a privileged operation without one. Stage 4 walks every tagged
+surface, and the audit's coverage diff reads the tags from the JSON.
 
 **Checkpoint:** Write tool → `./.threat-model-state/_chunk.tmp`:
 
@@ -194,7 +208,7 @@ language/framework the target actually uses.
   "stage": 1,
   "swarm": {
     "docs_reader": "<returned text block>",
-    "surface_mapper": [ {entry_point, description, trust_boundary, file_refs} ],
+    "surface_mapper": [ {entry_point, description, trust_boundary, file_refs, review_surfaces} ],
     "infra_reader": { "surfaces": [...], "threats": [...] },
     "asset_finder": [ {asset, description, sensitivity} ],
     "history_miner": [ {id, title, component, class, vector} ],
@@ -263,7 +277,7 @@ into the model file verbatim. It becomes the `evidence` column in Stage 3.
   "stage": 2,
   "section1_context": "<markdown prose>",
   "section2_assets": [ {asset, description, sensitivity} ],
-  "section3_entry_points": [ {entry_point, description, trust_boundary, reachable_assets} ],
+  "section3_entry_points": [ {entry_point, description, trust_boundary, reachable_assets, review_surfaces} ],
   "vuln_table": [ {id, title, component, class, vector, entry_point} ]
 }
 ```
@@ -350,7 +364,7 @@ Write each cluster as a section 4 row.
   "section1_context": "...",
   "section2_assets": [...],
   "section3_entry_points": [...],
-  "section4_threats": [ {threat, actor, surface, asset, risk_rating, status, controls, evidence} ],
+  "section4_threats": [ {threat, actor, surface, asset, risk_rating, status, controls, evidence, review_surfaces} ],
   "mitigation_notes": [ {cluster, recommended_mitigation} ],
   "sibling_locations": [ {threat, locations: ["file:func", ...]} ]
 }
@@ -396,6 +410,34 @@ cleanly than for code. Walk these instead:
 - **Scope enforcement**: where an automated approval, merge, or write path
   exists, what bounds it to its intended scope (path allowlist, label,
   reviewer set)?
+
+For **review-surface entry points** (tagged with `review_surfaces`), STRIDE
+misses the classic defects, so also walk each tagged surface's check in
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md):
+
+- **credential-acceptance:** can a credential issued for another purpose
+  (another audience, a short-lived or refresh token) pass this verifier, and
+  does revocation actually stop it?
+- **ownership-resolution:** can one owner's name match another owner's
+  objects (unescaped wildcard, prefix), on read, rename and delete paths?
+- **security-flags:** what does the shipped default do, does any reader of
+  the flag switch a control off, and does a control fail open when it is
+  unconfigured?
+- **outbound-fetch:** who controls the destination, including through
+  stored config or an unverified token, and is the guard applied to the
+  address actually connected to?
+- **stored-content-integrity:** are the bytes verified the bytes stored
+  after assembly, and can one bad object reach other tenants through
+  deduplication?
+- **scope-enforcement:** does every route and credential type apply the
+  scope check its siblings do?
+
+Each plausible answer is a section 4 row tagged with only the surfaces
+that threat exercises: a subset of the tags of the entry points its
+`surface` names (their union, when it names several). A check on a tagged
+surface that turns up nothing goes in `## 5. Deprioritized` with the reason
+(for example, "outbound-fetch on the proxy: the destination host is set only
+by the operator"). Untagged surfaces need no section 5 line.
 
 **LINDDUN privacy overlay (conditional).** If section 2 contains
 personal-data assets (PII, user records, identifiers, behavioral/audit

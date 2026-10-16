@@ -293,6 +293,13 @@ is a measured FN risk — emit an explicit `negative_results` entry:
 audit — <one-line reason>"`. Never let an unexamined surface read as
 clean by omission.
 
+Read the model from `<repo>-threat-model.json` when it sits beside the
+`.md`: the Markdown is a rendering of the JSON, and only the JSON carries
+the `review_surfaces` tags on entry points and threats. Each surface the
+model tags must end with `finding` or `negative` in
+`review_surface_coverage`, or `not_assessed` with its coverage gap. Never
+`not_applicable`: the model already found the surface in the target.
+
 **Review surfaces, with or without a threat model:** every report carries
 `review_surface_coverage`, one entry per review surface with status
 `finding`, `negative`, `not_applicable` or `not_assessed`

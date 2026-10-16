@@ -2,6 +2,52 @@
 
 All notable changes to Traust are documented here.
 
+## [0.25.0]
+
+- **`/threat-model` bootstrap maps the review surfaces.**
+  - The Surface-mapper's grep table gains five rows: credential verification
+    and minting, ownership resolution, security config flags, outbound fetch
+    and shared content stores. Route and guard coverage, the sixth surface,
+    stays under Network.
+  - Entry points those rows produce are tagged with `review_surfaces`.
+  - Stage 4's gap-fill walks each tagged surface's check from
+    `review-surfaces.md`, alongside STRIDE and the infra/IAM walk. Each
+    plausible answer becomes a section 4 row tagged with the surfaces it
+    exercises; a check that finds nothing goes in section 5 with the reason.
+  - Each new row names the tag it produces. `scope-enforcement` goes on
+    Network entry points behind a role, scope or permission check. Outbound
+    fetch means a server-side request whose destination someone other than
+    the operator can influence. A threat's tags are a subset of the union of
+    its entry points' tags. The Surface-mapper Returns shape and the
+    checkpoint templates carry `review_surfaces`.
+- **`/secure-code-audit` reads the threat model's review-surface tags from
+  its JSON** (`<repo>-threat-model.json`, which only the JSON carries). Each
+  surface the model tags must end `finding` or `negative`, or `not_assessed`
+  with its gap, never `not_applicable`.
+- **The `/vuln-scan` review brief checks the review surfaces.**
+  - "WHAT TO LOOK FOR" gains a REVIEW SURFACES group, one line per surface.
+    A shipped default that switches a control off is reportable even though
+    flags are operator-set; the brief's exclusion for operator-controlled
+    flags covers flags as an attack vector, not unsafe defaults.
+  - The depth heuristics add (d): apply each touched surface's check.
+  - The brief template now carries the depth heuristics (a)–(d) itself.
+  - Each reported finding names its `<review_surface>`: the surface where
+    the defect sits, whatever its CWE.
+  - Each review subagent returns a `<surface>` block per surface it
+    examined, using only the six ids.
+  - Step 4 builds `review_surface_coverage` from the subagents' output:
+    - `finding` lists every finding naming the surface.
+    - `negative` combines what each subagent examined, and only when no
+      finding names the surface.
+    - `not_applicable` requires every subagent that looked to agree.
+    - A surface nobody examined is `not_assessed` on a full scan and
+      `out_of_scope` on a diff scan, never `negative`.
+  - In `--diff` mode, a cluster that touches a verifier, a flag or its
+    readers, an outbound call, an owner lookup, a route guard or a
+    content-assembly path gets the matching surface check.
+- `/vuln-scan`'s diff-packet builder no longer quotes a deployment's pilot
+  cost figure in its docstring.
+
 ## [0.24.0]
 
 - **Per-model cache rates and per-request long-prompt pricing.** Pins

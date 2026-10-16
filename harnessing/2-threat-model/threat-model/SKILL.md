@@ -460,7 +460,8 @@ copy by contract, both forms in both places.
 The **Markdown** is consumed by `/secure-code-audit` (coverage diff),
 `/vuln-scan` (focus areas), `/triage` (environment context),
 `/threat-register` (portfolio rollup), and `/attack-coverage`
-(attack_refs).
+(attack_refs). `/secure-code-audit` reads the `review_surfaces` tags from
+the JSON, because the rendering doesn't carry them.
 
 The **JSON** is the contract artifact, and its consumer is the storage
 layer rather than another skill: `traust_engine.corpus.store_ingest`
