@@ -12,13 +12,7 @@ from traust.paths import skill_dir
 jsonschema = pytest.importorskip("jsonschema")
 yaml = pytest.importorskip("yaml")
 
-from tests.compliance_paths import (
-    compliance_configs_available,
-    compliance_configs_dir,
-    compliance_skip_reason,
-)
-
-_CONFIGS = compliance_configs_dir
+from tests.compliance_paths import compliance_registry, org_parameters, org_parameters_template
 
 
 def _load(name):
@@ -161,9 +155,8 @@ def _schema(name):
     return json.loads(_sp(name.removesuffix(".schema.json")).read_text())
 
 
-@pytest.mark.skipif(not compliance_configs_available(), reason=compliance_skip_reason())
 def test_seed_registry_validates():
-    reg = yaml.safe_load((_CONFIGS() / "compliance-mapping.yaml").read_text())
+    reg = yaml.safe_load(compliance_registry().read_text())
     jsonschema.validate(reg, _schema("compliance-mapping.schema.json"))
     check_ids = {c["id"] for c in reg["checks"]}
     for ctl in reg["controls"]:
@@ -171,11 +164,12 @@ def test_seed_registry_validates():
             assert cid in check_ids, f"{ctl['control_id']} references unknown check {cid}"
 
 
-@pytest.mark.skipif(not compliance_configs_available(), reason=compliance_skip_reason())
-def test_seed_org_parameters_validate_and_cover_registry_refs():
-    params = yaml.safe_load((_CONFIGS() / "org-parameters.yaml").read_text())
+@pytest.mark.parametrize("which", ["suite", "template"])
+def test_seed_org_parameters_validate_and_cover_registry_refs(which):
+    path = org_parameters() if which == "suite" else org_parameters_template()
+    params = yaml.safe_load(path.read_text())
     jsonschema.validate(params, _schema("org-parameters.schema.json"))
-    reg = yaml.safe_load((_CONFIGS() / "compliance-mapping.yaml").read_text())
+    reg = yaml.safe_load(compliance_registry().read_text())
     declared = set(params["parameters"])
     for chk in reg["checks"]:
         exp = (chk.get("assertion") or {}).get("expected")

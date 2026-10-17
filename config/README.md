@@ -49,6 +49,15 @@ ships a template for each such file:
 | `export.example.yaml` | `export.yaml` | the one-shot public export (public forge URL, private URLs to rewrite, build plumbing to strip, CHANGELOG cut) |
 | `internal-vocabulary.example.yaml` | `internal-vocabulary.yaml` | `scan_internal_refs` |
 | `ledger-signing-key.example.pub` | `ledger-signing-key.pub` | `traust_engine.reporting.validate`, `/drift-watch` signature check |
+| `sla-policy.example.yaml` | `sla-policy.yaml` | `traust_engine.metrics` (`/sla-view` default policy), `/drift-watch` provenance |
+| `org-parameters.example.yaml` | `org-parameters.yaml` | `/compliance-check` (organization-defined parameter values), `/drift-watch` provenance |
+| `adr-registry.example.yaml` | `adr-registry.yaml` | `traust ops index-adrs`, `/drift-watch` pin check |
+| `reachability-watch.example.yaml` | `reachability-watch.yaml` | `/drift-watch` (`reachability-watch:review`) |
+| `benchmark-targets.example.yaml` | `benchmark-targets.yaml` | `/recall-benchmark` (the answer key; canary and seeded sources sit beside it in `recall-benchmark/`) |
+
+The compliance scope registry, `compliance-scope.yaml`, also lives in the
+config home. It has no template: the scope intake (`/compliance-check`
+interview) writes it from the system owner's own declaration.
 
 ### How the harness finds the deployment directory
 

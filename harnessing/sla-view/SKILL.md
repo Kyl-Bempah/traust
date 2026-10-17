@@ -1,7 +1,7 @@
 ---
 name: sla-view
 description: >-
-  Use when the user asks about SLA compliance, overdue findings, response/remediation deadlines, breach counts, or escalation lists — e.g. "what's past SLA", "criticals overdue", "are we meeting the 30-day clock", "SLA view for FedRAMP", "who's most overdue". Replays disposition-ledger clocks against a schema-validated SLA policy (default: Red Hat PSIRT VMWM) and emits sla-view.{json,md} with per-team overdue tables and a human-gated escalation digest.
+  Use when the user asks about SLA compliance, overdue findings, response/remediation deadlines, breach counts, or escalation lists — e.g. "what's past SLA", "criticals overdue", "are we meeting the 30-day clock", "SLA view for FedRAMP", "who's most overdue". Replays disposition-ledger clocks against a schema-validated SLA policy (default: the deployment's sla-policy.yaml in the config home) and emits sla-view.{json,md} with per-team overdue tables and a human-gated escalation digest.
 metadata:
   harness.tier: "secondary"
 ---
@@ -21,10 +21,12 @@ not whether we shipped them lists.
 
 ## The one rule that matters
 
-**SLAs are policy data, never code.** The shipped default is the Red Hat
-PSIRT Vulnerability Management Workflow Manual policy
-(`progress-tracker/configs/sla-policy.yaml`, gated by
-`contracts/schemas/sla-policy.schema.json`, provenance + retrieval date inside).
+**SLAs are policy data, never code.** The default policy is the
+deployment's `sla-policy.yaml` in the config home (template:
+`config/sla-policy.example.yaml`; gated by
+`contracts/schemas/sla-policy.schema.json`, provenance + retrieval date
+inside). With no policy there and no `--policy`, the view fails and names
+the template; it never falls back to placeholder SLAs.
 Different SLAs — customer contracts, per-BU policies — are a different
 file passed with `--policy`, never an edit to the script. The
 severity mapping (PSIRT Important→high, Moderate→medium, Low→low) is
@@ -100,7 +102,7 @@ harness enum are different languages and the join must stay auditable.
 ## Integrations
 
 **Consumes:** the C9 findings DB (producer:
-python3 -m traust.cli corpus findings-db); `progress-tracker/configs/sla-policy.yaml`
+python3 -m traust.cli corpus findings-db); `$TRAUST_CONFIG_HOME/sla-policy.yaml`
 (human-curated policy data); `analysis-results/feeds/product_definitions.json`
 (producer: python3 -m traust.cli feeds fetch --feed product-definitions, read via
 python3 -m traust.cli registry products) plus `$TRAUST_CONFIG_HOME/product-definitions-map.yaml`

@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from traust_contracts import DeploymentConfigMissing
 from traust_engine.metrics import collect_spend as css
 
 from traust.cli.groups._registry import OpSpec
@@ -234,7 +235,8 @@ def add_sla_args(ap) -> None:
         "--policy",
         type=Path,
         default=None,
-        help="SLA policy YAML (data, schema-validated). Default: the shipped SLA policy.",
+        help="SLA policy YAML (data, schema-validated). "
+        "Default: sla-policy.yaml in the config home.",
     )
     ap.add_argument(
         "--profile", default=None, help="profile name (default: the policy's default profile)"
@@ -266,14 +268,18 @@ def call_sla(engine, args) -> int:
         )
         return 1
     as_of = dt.date.fromisoformat(args.as_of) if args.as_of else None
-    view, out_dir = metrics.build_sla_view(
-        db_path=db,
-        policy_path=args.policy,
-        profile=args.profile,
-        as_of=as_of,
-        out_dir=args.out_dir,
-        pd_cache_dir=args.pd_cache_dir,
-    )
+    try:
+        view, out_dir = metrics.build_sla_view(
+            db_path=db,
+            policy_path=args.policy,
+            profile=args.profile,
+            as_of=as_of,
+            out_dir=args.out_dir,
+            pd_cache_dir=args.pd_cache_dir,
+        )
+    except DeploymentConfigMissing as e:
+        print(f"ERROR: {e} (or pass --policy)", file=sys.stderr)
+        return 1
     s = view["summary"]
     profile_name = view["metadata"]["profile"]
     print(f"wrote {out_dir}/sla-view.{{json,md}} (profile {profile_name})")

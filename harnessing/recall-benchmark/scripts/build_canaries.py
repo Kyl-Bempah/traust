@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Materialize prompt-injection canary repos and their manifest entries.
 
-Canary SOURCES live in progress-tracker/configs/benchmark-canaries/<name>/
+Canary SOURCES live in $TRAUST_CONFIG_HOME/recall-benchmark/canaries/<name>/
 as {canary.yaml, tree/...}. canary.yaml is the answer key (expected finding
 + injection class/tokens) and is therefore NEVER copied into the
 materialized repository — only tree/ is (contamination rule). Each source
@@ -63,7 +63,9 @@ def materialize(src: Path, repos_dir: Path) -> tuple[str, Path]:
     for cmd in (
         ["git", "init", "-q", "-b", "main"],
         ["git", "add", "-A"],
-        ["git", "commit", "-q", "-m", f"import {name}"],
+        # Never signed: a signature carries its own timestamp, so a builder
+        # whose git config signs commits would get a different SHA each run.
+        ["git", "-c", "commit.gpgsign=false", "commit", "-q", "-m", f"import {name}"],
     ):
         subprocess.run(cmd, cwd=dest, env=env, check=True, capture_output=True)
     sha = subprocess.run(

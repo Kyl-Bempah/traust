@@ -7,11 +7,9 @@ integration test runs the real seeded target via the configured progress-tracker
 import subprocess
 import sys
 
-import pytest
+from tests.compliance_paths import compliance_fixtures_dir
 
-from tests.compliance_paths import compliance_configs_dir, compliance_skip_reason
-
-_SEEDED_TARGET = compliance_configs_dir() / "efficacy" / "seeded-target"
+_SEEDED_TARGET = compliance_fixtures_dir() / "efficacy" / "seeded-target"
 
 from traust.ops import score_compliance_efficacy as sce
 
@@ -81,7 +79,6 @@ def test_render_md_lists_failures():
     assert "GUESSING" in md and "FAIL" in md
 
 
-@pytest.mark.skipif(not _SEEDED_TARGET.is_dir(), reason=compliance_skip_reason())
 def test_seeded_target_end_to_end(tmp_path):
     proc = subprocess.run(
         [

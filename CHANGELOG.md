@@ -2,6 +2,48 @@
 
 All notable changes to Traust are documented here.
 
+## [0.30.0]
+
+- **Nothing reads `progress-tracker/configs/` any more** (owner decision,
+  2026-10-17). Deployment config lives in the config home
+  (`TRAUST_CONFIG_HOME`), with a template here in `config/`.
+  - **New templates:** `sla-policy`, `org-parameters`, `adr-registry`,
+    `reachability-watch` and `benchmark-targets` (`*.example.yaml`), each
+    schema-valid and estate-neutral. `install_traust` does not copy them
+    into a new config home, because their placeholder values would be
+    reported as if someone had declared them.
+  - **`/drift-watch`** reads `adr-registry.yaml`, `sla-policy.yaml`,
+    `org-parameters.yaml` and `reachability-watch.yaml` from the config
+    home, and the framework provenance and catalogs from traust-engine.
+    Before this, the path was built three different ways in one file.
+  - **`/compliance-check`** takes the control-to-check mapping from
+    traust-engine (`--registry` still overrides), org parameters from the
+    config home, and the scope registry from the engine's
+    `compliance.scope_registry()`.
+  - **`traust ops index-adrs`** defaults to the config home's
+    `adr-registry.yaml`.
+  - **`/recall-benchmark`** documents the answer key at
+    `$TRAUST_CONFIG_HOME/benchmark-targets.yaml` and the fixture sources at
+    `$TRAUST_CONFIG_HOME/recall-benchmark/{canaries,seeded}/`.
+  - **`/sla-view`** uses the config home's `sla-policy.yaml`; with none
+    there, it fails and names the template.
+- **Synthetic compliance fixtures moved into `tests/fixtures/compliance/`**
+  (the per-check good and bad snapshots, and the efficacy seeded target). The
+  compliance tests used to skip whenever progress-tracker wasn't checked out;
+  they now always run. `traust ops score-compliance-efficacy` defaults to the
+  in-repo seeded target.
+- **The calibration test ran zero times.** `test_compliance_phase4.py`
+  looked for `iac-inventory-calibration.json`, but the snapshot is
+  `iac-inventory-app-interface-mirror.json`, and its module-level skip also
+  hid every other test in the file. It now looks in the operator config
+  home under `compliance/calibration/`, and only the two idempotence tests
+  skip when the snapshot is absent.
+- **Recall-benchmark fixture pins are reproducible again.** `build_canaries.py`
+  committed with the builder's git config, so a builder that signs commits
+  got a new SHA every run (the signature carries a timestamp). The fixture
+  commit is now never signed.
+- **Pins** traust-engine 0.31.0.
+
 ## [0.29.0]
 
 - **Deprioritized threats carry review-surface tags.** traust-contracts

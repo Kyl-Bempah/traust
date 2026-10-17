@@ -241,15 +241,15 @@ contingent (2026-07-30 decision), and never hold an owner slot.
 a copy of every findings folder from `processed-results/`, shared with
 its assigned owners via `progress-tracker/scripts/drive/share_results.py`
 (`commenter` grants, OAuth desktop-app credentials). Sharing plans are
-YAML configs under `progress-tracker/configs/` (per-campaign files —
-see that directory; escalation contacts share through
-`configs/escalation-contacts-share.yaml`); folder IDs come from
+per-campaign YAML records kept in the deployment's private repository,
+never in this one; escalation contacts share through
+`escalation-contacts-share.yaml` in the config home. Folder IDs come from
 `progress-tracker/tracking/drive-sharing-plan.md`, recipients from
 `tracking/routed-results.md`.
 
 ```bash
-python share_results.py --config configs/<campaign>.yaml --dry-run   # preview
-python share_results.py --config configs/<campaign>.yaml             # share for real
+python share_results.py --config <sharing-plan>.yaml --dry-run   # preview
+python share_results.py --config <sharing-plan>.yaml             # share for real
 ```
 
 **Slack.** Once Drive access is granted, each owner receives a DM via
