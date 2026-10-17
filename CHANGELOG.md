@@ -2,6 +2,25 @@
 
 All notable changes to Traust are documented here.
 
+## [0.27.0]
+
+- **`/recall-benchmark` supports seeded fixtures.** `build_canaries.py` now
+  accepts a `seed.yaml` answer key beside the existing `canary.yaml`: a
+  synthetic app with one expected finding per planted defect and no
+  `injection` block, registered as a `bt-seeded-<name>` target. Seeded
+  fixtures live in `progress-tracker/configs/benchmark-seeded/`, apart from
+  the canaries, so adding one leaves the canaries' entries untouched.
+  - The builder refuses a source with both answer keys, or with an answer
+    key anywhere inside `tree/` (it used to check only `tree/canary.yaml`).
+  - Seeded fixtures are always development split: their author has read the
+    answer key.
+  - The manifest is now written with `allow_unicode`, so a rebuild no longer
+    re-escapes every non-ASCII character in existing entries.
+  - Materializing skips `__pycache__/` and `*.pyc`, so a target's SHA depends
+    only on committed content, not on who last ran Python over the source.
+  - The skill documents seeded fixtures: one defect per file (matching is by
+    path and CWE), and nothing in `tree/` may hint at the answers.
+
 ## [0.26.0]
 
 - **The config-matrix pre-scan expands Python settings** (new

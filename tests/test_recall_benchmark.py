@@ -529,3 +529,125 @@ def test_advisory_id_without_shared_path_is_not_strict(tmp_path):
     )
     res = mb.score({"targets": [t]}, _run(tmp_path, t, rep), False)
     assert res["overall"]["detected"] == 0
+
+
+# --- build_canaries: canaries and seeded fixtures ------------------------------
+
+bc = _load("build_canaries", skill_dir("recall-benchmark") / "scripts" / "build_canaries.py")
+
+
+def _source(root, name, key, meta, files=None):
+    src = root / name
+    (src / "tree").mkdir(parents=True)
+    (src / key).write_text(yaml.safe_dump({"name": name, **meta}))
+    for rel, body in (files or {"main.py": "print('hi')\n"}).items():
+        p = src / "tree" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(body)
+    return src
+
+
+def _build(tmp_path, sources):
+    manifest = tmp_path / "targets.yaml"
+    manifest.write_text(yaml.safe_dump({"version": 1, "updated": "2026-01-01", "targets": []}))
+    rc = bc.main(
+        [
+            "--sources",
+            str(sources),
+            "--manifest",
+            str(manifest),
+            "--repos-dir",
+            str(tmp_path / "repos"),
+        ]
+    )
+    return rc, {t["id"]: t for t in yaml.safe_load(manifest.read_text())["targets"]}
+
+
+def test_a_canary_entry_is_unchanged(tmp_path):
+    sources = tmp_path / "sources"
+    _source(
+        sources,
+        "cn-x",
+        "canary.yaml",
+        {
+            "injection": {"class": "report_shape", "tokens": ["T-1"]},
+            "expected": {"cwes": ["cwe-22"], "paths": ["a.py"], "severity": "high", "title": "t"},
+        },
+    )
+    rc, targets = _build(tmp_path, sources)
+    entry = targets["bt-canary-cn-x"]
+    assert rc == 0 and entry["injection"] == {"class": "report_shape", "tokens": ["T-1"]}
+    assert [e["cwes"] for e in entry["expected"]] == [["CWE-22"]]
+    assert entry["held_out"] is False and entry["provenance"] == "seeded"
+
+
+def test_a_seeded_fixture_lists_every_expected_finding(tmp_path):
+    sources = tmp_path / "sources"
+    _source(
+        sources,
+        "notes-app",
+        "seed.yaml",
+        {
+            "language": "python",
+            "expected": [
+                {"cwes": ["CWE-639"], "paths": ["a.py"], "severity": "high", "title": "one"},
+                {"cwes": ["CWE-918"], "paths": ["b.py"], "severity": "medium", "title": "two"},
+            ],
+        },
+    )
+    rc, targets = _build(tmp_path, sources)
+    entry = targets["bt-seeded-notes-app"]
+    assert rc == 0 and "injection" not in entry and entry["language"] == "python"
+    assert [e["paths"] for e in entry["expected"]] == [["a.py"], ["b.py"]]
+    assert entry["held_out"] is False
+    from jsonschema import Draft202012Validator
+    from traust_contracts.paths import schema_dir
+
+    schema = json.loads((schema_dir() / "benchmark-target.schema.json").read_text())
+    doc = {"version": 1, "updated": "2026-01-01", "targets": list(targets.values())}
+    assert [e.message for e in Draft202012Validator(schema).iter_errors(doc)] == []
+    # the answer key never enters the materialized repo
+    repo = Path(entry["repo_url"].removeprefix("file://"))
+    assert not list(repo.rglob("seed.yaml")) and (repo / "main.py").exists()
+
+
+def test_bytecode_caches_never_enter_the_repo_or_change_the_sha(tmp_path):
+    meta = {"expected": [{"cwes": ["CWE-1"], "paths": ["main.py"], "severity": "low"}]}
+    entries = []
+    for name, with_cache in (("clean", False), ("dirty", True)):
+        work = tmp_path / name
+        work.mkdir()
+        src = _source(work / "sources", "app", "seed.yaml", meta)
+        if with_cache:
+            (src / "tree" / "__pycache__").mkdir()
+            (src / "tree" / "__pycache__" / "main.cpython-312.pyc").write_bytes(b"\x00junk")
+        entries.append(_build(work, work / "sources")[1]["bt-seeded-app"])
+    clean, dirty = entries
+    assert clean["pre_fix_sha"] == dirty["pre_fix_sha"]
+    assert not list(Path(dirty["repo_url"].removeprefix("file://")).rglob("*.pyc"))
+
+
+def test_an_answer_key_inside_the_tree_is_refused(tmp_path):
+    sources = tmp_path / "sources"
+    _source(
+        sources,
+        "leaky",
+        "seed.yaml",
+        {"expected": [{"cwes": ["CWE-1"], "paths": ["a.py"], "severity": "low"}]},
+        files={"docs/seed.yaml": "expected: []\n"},
+    )
+    with pytest.raises(SystemExit):
+        _build(tmp_path, sources)
+
+
+def test_one_answer_key_per_source(tmp_path):
+    sources = tmp_path / "sources"
+    src = _source(
+        sources,
+        "both",
+        "seed.yaml",
+        {"expected": [{"cwes": ["CWE-1"], "paths": ["a.py"], "severity": "low"}]},
+    )
+    (src / "canary.yaml").write_text("name: both\n")
+    with pytest.raises(SystemExit):
+        _build(tmp_path, sources)
