@@ -108,8 +108,6 @@ State files in `./.threat-model-state/`:
   below).
 - `_chunk.tmp` — transient payload buffer; overwritten before every
   `save`/`append` call.
-- `_model.md` — Stage-5 assembly buffer for the model file; scratch, never
-  an artifact.
 
 **Start of run — resume check.** Bash:
 `python3 -m traust.cli admin checkpoint load ./.threat-model-state`
@@ -526,54 +524,45 @@ clusters are closed by the same control, emit one row with both clusters'
 ids. Gap-fill threats from Stage 4 get rows here too where an obvious
 class-level control exists.
 
-Assemble the file **incrementally** in `./.threat-model-state/_model.md`
-(one chunk per `## N.` section; a stalled chunk loses that section, not the
-file), then copy the assembled result to `<target-dir>/<model-file>` in
-one Write. The assembly happens in cwd because `checkpoint.py append` is
-cwd-confined; the final Write tool call is not.
+**Emit the JSON, then render.** Compose `<target-dir>/<repo>-threat-model.json`
+against `threat-model.schema.json`, exactly as SKILL.md *Step 2 — Shared
+output contract* describes: each `## N.` section above is a field of that
+document (`system_context`, `assets`, `entry_points`, `threats`,
+`deprioritized`, `open_questions`, `mitigations`, `attack_scenarios`), not
+Markdown to assemble. Never hand-author the `.md`.
 
-1. Write tool → `./.threat-model-state/_model.md` (clobbers any prior
-   file) containing only the title line and `## 1. Context` section.
-2. For each remaining section (`## 2. Assets`, `## 3. Entry points`,
-   `## 4. Threats`, `## 5. Deprioritized`, `## 6. Open questions`,
-   `## 7. Provenance`, `## 8. Recommended mitigations`,
-   `## 9. Attack scenarios`):
-   - Write tool → `./.threat-model-state/_chunk.tmp` containing that ONE
-     section's markdown.
-   - Bash:
-     `python3 -m traust.cli admin checkpoint append ./.threat-model-state/_model.md --from ./.threat-model-state/_chunk.tmp`
-3. Read tool → `./.threat-model-state/_model.md`, then Write tool →
-   `<target-dir>/<model-file>` with the same content.
+Set `provenance`:
 
-Set `## 7. Provenance`:
-
-```
-- mode: bootstrap
-- date: <today>
-- target: <target-dir> @ <git rev-parse --short HEAD or "not a git repo">
-- inputs: <--vulns path; --context paths; or "git-log + CHANGELOG mined">
-- owner: unset
-- harness_version: <VERSION file semver>-<harness git short SHA>
+```json
+{"mode": "bootstrap", "date": "<today>",
+ "target": "<target-dir> @ <git rev-parse --short HEAD, or \"not a git repo\">",
+ "inputs": "<--vulns path; --context paths; or \"git-log + CHANGELOG mined\">",
+ "harness_version": "<VERSION file semver>-<harness git short SHA>"}
 ```
 
-**Validation gate.** The run is not complete until the deterministic linter
-passes:
+Leave `owner` out: bootstrap has no owner, and the schema treats an absent
+owner as unset.
 
+**Validation gate.** The run is not complete until the same three commands
+every artifact uses pass:
+
+```bash
+python3 -m traust.cli reporting rate-threats <repo>-threat-model.json
+python3 -m traust.cli reporting validate <repo>-threat-model.json
+python3 -m traust.cli reporting render   <repo>-threat-model.json -o <repo>-threat-model.md
 ```
-python3 -m traust.cli reporting lint <target-dir>/<model-file>
-```
 
-Fix every ERROR it reports and re-run until `Result: ALL PASSED`. The
-linter enforces the schema contract (sections, columns, enums), the
-coverage invariant, and evidence-cell hygiene — the same role
-`validate_report.py` plays for audit and triage artifacts.
+Fix every error `validate` reports and re-run until it passes with 0 errors;
+nothing is rendered from an invalid artifact. A large model can be built in
+pieces under `./.threat-model-state/` (one `_chunk.tmp` per section, merged
+into the JSON), so a stalled step loses one section, not the model.
 
-**Checkpoint (final):** After the file is on disk and the linter passes, Bash:
+**Checkpoint (final):** After the JSON validates and the `.md` is rendered, Bash:
 `python3 -m traust.cli admin checkpoint done ./.threat-model-state 5 --key stage`
 
 Hand back to the user:
 
-1. Path to the file.
+1. Paths to the JSON artifact and its rendered `.md`.
 2. Top 5 threats (id, threat, severity).
 3. Count of threats with evidence vs without (shows gap-fill ran).
 4. Stage-3b sibling locations as candidate leads for `/vuln-scan` or the
@@ -583,4 +572,4 @@ Hand back to the user:
 7. If `--context` was used: per-source one-line ingestion summaries and any
    doc-vs-code conflicts recorded (so the user can course-correct a
    mis-parsed source).
-8. The linter result line (`Result: ALL PASSED`).
+8. The `reporting validate` result line.

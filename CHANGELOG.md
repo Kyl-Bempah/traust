@@ -2,6 +2,27 @@
 
 All notable changes to Traust are documented here.
 
+## [0.28.0]
+
+- **Pins traust-engine 0.29.0.** The rendered threat-model Markdown now
+  shows `review_surfaces`: sections 3 and 4 gain a trailing column when
+  any row is tagged. The linter checks the tags against the enum, and the
+  corpus parser reads them back.
+- **threat-model bootstrap emits JSON, then renders.** Stage 5 used to
+  assemble `_model.md` by hand and gate on `reporting lint`. It now
+  composes `<repo>-threat-model.json` per SKILL.md Step 2 and runs
+  `rate-threats`, then `validate`, then `render`, so a bootstrap model
+  follows the same JSON-first path as every other model. The provenance
+  block no longer carries `owner`.
+- **`traust admin checkpoint reset` leaves an empty state dir.** It used
+  to delete the dir, so a step that wrote into it before the first
+  `save` (a pre-scan seed, for example) failed on a missing directory.
+- **vuln-scan and verify-remediation record tools where the schema has
+  room.** Vuln-findings metadata has no `tools` field, so vuln-scan
+  records whether the k8s-hardening step ran in
+  `metadata.additional.deterministic_steps`. verify-remediation puts
+  scanner versions in `metadata.additional.tools`.
+
 ## [0.27.2]
 
 - **Pins traust-engine 0.28.0** (rule pack v1.9).

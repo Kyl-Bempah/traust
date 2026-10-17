@@ -386,10 +386,11 @@ exactly as it does to files read from the checkout.
    `templated_files` accounting exactly as `/secure-code-audit`'s
    *Deterministic pre-scan* section prescribes. Its `tenancy_signals`
    (cluster-scoped RBAC, `InsecureSkipVerify` call sites, watch scope)
-   also seed code-level focus areas. Record the run in the output
-   `metadata.tools`. Skip when the target has no Kubernetes YAML, recording
-   `"k8s-hardening": "skipped: <reason>"` in the output
-   `metadata.additional.deterministic_steps` (`"ran"` when it executes).
+   also seed code-level focus areas. Record the run as
+   `"k8s-hardening": "ran"` in the output
+   `metadata.additional.deterministic_steps` (vuln-findings `metadata` has no
+   `tools` field), or `"skipped: <reason>"` when the target has no
+   Kubernetes YAML.
 7. **Deterministic semantic pre-scan.** If `opengrep` is on `PATH`, run
    python3 -m traust.cli adapters opengrep <target-dir> --out /tmp/<repo>-opengrep.json
    and hand each focus-area subagent the facts in its area as candidate

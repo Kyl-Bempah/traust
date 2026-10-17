@@ -507,8 +507,9 @@ scanner checks mechanically.
      assessment on the patched checkout and compare results against the
      original. That skill owns the differential logic for crypto facts.
 4. **Record the runs** in the verification report: scanner versions (and
-   rule-pack SHA) in the report's metadata tools, plus a
-   `deterministic_steps` map (`"ran"` / `"skipped: <reason>"`) mirroring
+   rule-pack SHA) as `metadata.additional.tools` (verification `metadata`
+   has no `tools` field of its own), plus a
+   `metadata.additional.deterministic_steps` map (`"ran"` / `"skipped: <reason>"`) mirroring
    the audit convention — a verification performed without the scanners
    is evidentially weaker and must say so, never imply parity.
 5. **Emit it as typed evidence, by scanning BOTH revisions.** Steps 2–3
