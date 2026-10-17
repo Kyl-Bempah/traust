@@ -38,7 +38,7 @@ Run it whenever you:
 - add / remove a script under `scripts/`, a schema under `contracts/schemas/`, or a
   command wrapper under `.claude/commands/`,
 - add or remove a `## Stage N` in `PROCESS.md`,
-- bump `VERSION` (the group README states the harness version), or
+- bump `VERSION`, or
 - edit any of `README.md`, `AGENTS.md`, `PROCESS.md`, or `docs/*.md`.
 
 ## Run it
@@ -72,17 +72,7 @@ logic runs in the test suite as `tests/test_docs_consistency.py`.
    glob/placeholder patterns (`*`, `<repo>`, `**`), and historical records
    (`CHANGELOG.md`) are intentionally skipped.
 
-3. **Group README.** The forge group profile page
-   (`../gitlab-profile/README.md`, a sibling checkout) also states harness
-   facts. When the sibling is present, the checker vets:
-   | Claim | Source of truth |
-   |---|---|
-   | `Harness version: vX.Y.Z` / `harness **vX.Y.Z**` (any vX.Y.Z on a line mentioning "harness") | the harness `VERSION` file |
-   | `N skills` / `Skills (N), by function` | `harnessing/*/SKILL.md` |
-   | `N slash-command wrappers` / `N commands` | `.claude/commands/*.md` |
-   When the sibling is not checked out, the check is skipped (and says so).
-
-4. **Enumeration coverage.** Docs that present themselves as inventories must
+3. **Enumeration coverage.** Docs that present themselves as inventories must
    mention every item: each skill needs a `## <name>` section in
    `docs/skills.md` and a mention in `README.md`; every schema and every
    `docs/*.md` guide must be reachable from `README.md`. Count checks alone
@@ -92,19 +82,19 @@ logic runs in the test suite as `tests/test_docs_consistency.py`.
    fails when the committed copy differs from a fresh render — never hand-edit
    it; edit the skill's frontmatter and regenerate.
 
-5. **Version sync.** `pyproject.toml` `[project] version` must equal the
+4. **Version sync.** `pyproject.toml` `[project] version` must equal the
    `VERSION` file (it once drifted 30 releases silently).
 
-6. **Symlink integrity.** Every symlink under `.claude/` and `.crush/` must
+5. **Symlink integrity.** Every symlink under `.claude/` and `.crush/` must
    resolve — catches half-removed wrapper pairs the dead-path checks skip.
 
-7. **External CLI tools.** Every binary the harness shells out to
+6. **External CLI tools.** Every binary the harness shells out to
    (`subprocess`, `shutil.which`, self-named `--tool` defaults, vendored
    `bin/` paths, `command -v`) must have a row in
    `docs/external-dependencies.md` — the CLI-tool counterpart of the
    `/check-licensing` Python-dependency gate.
 
-8. **CLI-example flag drift.** Every maintained-doc line that invokes an
+7. **CLI-example flag drift.** Every maintained-doc line that invokes an
    in-repo Python script has its `--flags` verified against that script's
    source — the rot class where a documented flag no longer exists and the
    reader's first command fails (`validate_report.py --validate` survived
@@ -112,14 +102,14 @@ logic runs in the test suite as `tests/test_docs_consistency.py`.
    argparse-implicit; dynamic flags go in the checker's per-script
    allowlist with justification.
 
-9. **Partial enum quotes.** A maintained-doc line that names a schema
+8. **Partial enum quotes.** A maintained-doc line that names a schema
    enum-bearing field and backtick-quotes 3+ of its values but not all of
    them is a lagging enumeration (the class where `validation_status` docs
    missed `hardening` for months). Only fields whose enum is identical
    everywhere it appears in `contracts/schemas/*.json` are tracked; enum lists belong
    in `docs/report-structure.md` — link, don't restate.
 
-10. **As-of banners.** Any `docs/*.md` whose name marks it as an
+9. **As-of banners.** Any `docs/*.md` whose name marks it as an
     assessment, draft, or comparison must carry a dated as-of banner —
     point-in-time judgments presented as live status rot silently (four
     such docs were up to ~143 releases stale at the 2026-07-25 sweep).
@@ -156,11 +146,5 @@ number in the named doc (and, for a new skill, add its row + section to
 `docs/skills.md`). For a dead path, repoint or remove the reference. Re-run
 until it exits `0`. Only touch python3 -m traust.cli check docs-consistency itself to
 change *what* is checked (e.g. add a new count claim or an allowlist entry).
-
-**Group-README drift is fixed in the sibling repo**: edit
-`../gitlab-profile/README.md` (version banner, repository-map row, key-contents
-table, skills-by-function table — a new skill needs a row in its function
-group), re-run the checker, then commit and push that repo separately — its
-page is the group's public face and does not ship with the harness.
 
 **Unresolved conflict markers** (added 2026-08-13). Every tracked text file is scanned for `<<<<<<< ` / `>>>>>>> ` at line start; a hit fails the gate. Motivated by a live bad push — a rebase-resolution script failed silently, `git rebase --continue` committed the conflicted file, and CHANGELOG.md reached main with six markers while every other gate passed, because none of them looked. `=======` is deliberately NOT a trigger (it is a legitimate Markdown setext H1 underline); the two directional markers have no legitimate line-start use and a conflict always carries one. Runs FIRST, since a conflicted file makes the other checks emit confusing downstream noise. A doc that legitimately demonstrates conflict resolution opts out with `docs-check: allow-conflict-markers`. Fails open when git cannot list tracked files.
