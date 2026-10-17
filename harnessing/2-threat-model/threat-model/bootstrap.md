@@ -433,9 +433,10 @@ misses the classic defects, so also walk each tagged surface's check in
 Each plausible answer is a section 4 row tagged with only the surfaces
 that threat exercises: a subset of the tags of the entry points its
 `surface` names (their union, when it names several). A check on a tagged
-surface that turns up nothing goes in `## 5. Deprioritized` with the reason
-(for example, "outbound-fetch on the proxy: the destination host is set only
-by the operator"). Untagged surfaces need no section 5 line.
+surface that turns up nothing goes in `## 5. Deprioritized` with the reason,
+tagged with that surface in `review_surfaces` (for example, threat "SSRF
+through the proxy", reason "the destination host is set only by the
+operator", `["outbound-fetch"]`). Untagged surfaces need no section 5 line.
 
 **LINDDUN privacy overlay (conditional).** If section 2 contains
 personal-data assets (PII, user records, identifiers, behavioral/audit
@@ -455,7 +456,8 @@ stage didn't run.
 
 Populate `## 5. Deprioritized` with STRIDE categories you considered and
 ruled out, with the reason ("Repudiation: not applicable, no multi-user
-actions").
+actions"). These rows carry no `review_surfaces` unless the ruled-out
+threat sits on a review surface.
 
 **Checkpoint:** Write tool → `./.threat-model-state/_chunk.tmp`:
 
@@ -466,7 +468,7 @@ actions").
   "section2_assets": [...],
   "section3_entry_points": [...],
   "section4_threats": [ {...stage3 rows + gap-fill rows with empty evidence} ],
-  "section5_deprioritized": [ {threat, reason} ],
+  "section5_deprioritized": [ {threat, reason, review_surfaces} ],
   "mitigation_notes": [...],
   "sibling_locations": [...]
 }

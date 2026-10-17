@@ -2,6 +2,24 @@
 
 All notable changes to Traust are documented here.
 
+## [0.29.0]
+
+- **Deprioritized threats carry review-surface tags.** traust-contracts
+  0.60.0 lets a section 5 row carry `review_surfaces`, and traust-engine
+  0.30.0 renders and lints it.
+  - `/threat-model` bootstrap tags the section 5 row it writes when a check
+    on a tagged surface turns up nothing, so the model records that the
+    surface was checked and the threat set aside.
+  - `/secure-code-audit`'s threat-model coverage diff counts those tags
+    with the entry-point and threat tags: each must end the audit as
+    `finding`, `negative` or `not_assessed`.
+- **The vuln-findings schema enforces the full-scan rule.** A record that
+  answers any review surface `out_of_scope` must carry
+  `metadata.additional.coverage_diff`. The engine validator already
+  checked this; now the schema does too, for every consumer.
+- **Pins** traust-contracts 0.60.0, traust-ledger 0.11.3 and traust-engine
+  0.30.0.
+
 ## [0.28.1]
 
 - **The docs gate no longer checks the old GitLab group page.**

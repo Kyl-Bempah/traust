@@ -235,9 +235,10 @@ names the scan report that last answered each surface.
 
 ### Threat-model tags
 
-`/threat-model` tags each threat and entry point with `review_surfaces`, the
-surfaces it sits on. The audit's threat-model coverage diff uses the tags
-to map modelled threats to its record.
+`/threat-model` tags each threat, entry point and deprioritized threat with
+`review_surfaces`, the surfaces it sits on. A tagged deprioritized threat
+records a surface the model checked and set aside. The audit's threat-model
+coverage diff uses all three to map modelled surfaces to its record.
 
 ## Negative results from searches
 

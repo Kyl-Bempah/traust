@@ -294,9 +294,10 @@ audit — <one-line reason>"`. Never let an unexamined surface read as
 clean by omission.
 
 Read the model from `<repo>-threat-model.json` when it sits beside the
-`.md`: the Markdown is a rendering of the JSON, and only the JSON carries
-the `review_surfaces` tags on entry points and threats. Each surface the
-model tags must end with `finding` or `negative` in
+`.md`: the Markdown is a rendering of the JSON, and the JSON is the source
+for the `review_surfaces` tags on entry points, threats and deprioritized
+threats (section 5). Each surface the model tags, in any of the three, must
+end with `finding` or `negative` in
 `review_surface_coverage`, or `not_assessed` with its coverage gap. Never
 `not_applicable`: the model already found the surface in the target.
 
