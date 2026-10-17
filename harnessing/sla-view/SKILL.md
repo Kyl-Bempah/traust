@@ -62,7 +62,7 @@ harness enum are different languages and the join must stay auditable.
    report it with the caveat that an accountable contact is an
    escalation path, **not** an owner — anyone acting on one checks the
    contact against the deployment's employee directory first (the
-   ledger's `LEDGER_DIRECTORY_COMMAND`, where one is configured).
+   `ledger.yaml` `identity.directory_command`, where one is configured).
 
 ## Clock semantics (deterministic, stated in the artifact)
 

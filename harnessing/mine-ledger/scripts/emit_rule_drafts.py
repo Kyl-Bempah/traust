@@ -21,7 +21,9 @@ script is deterministic staging plus the calibration gate:
 
 runs opengrep with the candidate rule over before/ (>=1 match required)
 and after/ (0 matches required). A draft is promotable into the pack only
-when --verify passes. Drafts are NEVER loaded by run_opengrep — the
+when --verify passes. The pack is the single copy bundled in traust-engine
+(src/traust_engine/data/secure-code-audit/opengrep-rules/): promotion is a
+traust-engine PR, then the traust engine-pin bump. Drafts are NEVER loaded by run_opengrep — the
 rule-drafts/ dir sits outside the pack.
 
 CLI:
@@ -171,7 +173,9 @@ def emit_draft(cand: dict, out_dir: Path) -> dict | None:
 **Authoring contract:** write `patterns:` in `rule.skeleton.yaml` so that
 `emit_rule_drafts.py --verify {slug} --rule rule.skeleton.yaml`
 fires on every file in `before/` and on nothing in `after/`. Then move
-the rule into the pack category file (not `regression.yaml` dumps —
+the rule into the pack category file in traust-engine
+(`src/traust_engine/data/secure-code-audit/opengrep-rules/`, a traust-engine
+PR) — not `regression.yaml` dumps —
 match the pack's category layout) with `ruleid:`-annotated fixture
 lines, and delete this draft dir.
 """,

@@ -73,6 +73,40 @@ def add_config_home_arg(parser) -> None:
     )
 
 
+def add_ledger_binding_args(parser) -> None:
+    """Standard --ledger-layer / --product-repo flags: the run's ledger layer.
+
+    Required when ``ledger.yaml`` sets a ``dsn`` (the database ledger is never
+    addressed by file name); refused otherwise. Given both, the layer must belong
+    to the product_repo.
+    """
+    group = parser.add_argument_group("ledger layer (when ledger.yaml sets a dsn)")
+    group.add_argument("--ledger-layer", default=None, help="the run's Ledger layer ID")
+    group.add_argument(
+        "--product-repo", default=None, help="product_repo whose Ledger layer this run uses"
+    )
+
+
+def ledger_binding_argv(args) -> list[str]:
+    """The binding flags to forward to a child traust CLI (empty when unbound)."""
+    argv: list[str] = []
+    if getattr(args, "ledger_layer", None):
+        argv += ["--ledger-layer", args.ledger_layer]
+    if getattr(args, "product_repo", None):
+        argv += ["--product-repo", args.product_repo]
+    return argv
+
+
+def bind_ledger(engine: HarnessEngine, args) -> None:
+    """Bind the run's ledger layer from --ledger-layer / --product-repo, if given."""
+    from traust_engine.ledger import LayerBinding
+
+    layer_id = getattr(args, "ledger_layer", None)
+    product_repo_id = getattr(args, "product_repo", None)
+    if layer_id or product_repo_id:
+        engine.ledger.bind(LayerBinding(layer_id=layer_id, product_repo_id=product_repo_id))
+
+
 def analysis_results_dir(engine: HarnessEngine) -> Path:
     """Configured local analysis-results root (fail-loud when unset)."""
     return locations.require(

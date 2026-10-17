@@ -29,7 +29,8 @@ allowed-tools:
 Turn the campaign's disposition ledger into rule-authoring fuel: extract
 every ledger-**confirmed** true positive from the cumulative
 `*-findings-current.json` reports, cluster by (primary CWE, language),
-match against the harness-authored opengrep pack, and aggregate the
+match against the Traust opengrep pack (bundled in traust-engine, the only
+copy), and aggregate the
 per-fact judge decisions audits record in `scanner_correlation` into
 campaign-wide per-rule precision.
 
@@ -45,7 +46,7 @@ structured `scanner_correlation` entry (tool `opengrep`, `rule_id`,
 - A findings tree to mine — default `analysis-results/findings` resolved
   from the campaign workspace (or `AUDIT_RESULTS_ROOT`).
 - `--pack <dir>` — rule pack to check coverage against (default: the
-  in-repo pack `harnessing/3-audit/secure-code-audit/opengrep-rules/`).
+  pack bundled in traust-engine, `traust_engine/data/secure-code-audit/opengrep-rules/`).
 - `--out <dir>` — output directory. Default for campaign runs:
   `progress-tracker/metrics/rule-mining/` so the report versions alongside
   the other dashboards.
@@ -126,7 +127,9 @@ python3 harnessing/mine-ledger/scripts/emit_rule_drafts.py \
     --rule   harnessing/mine-ledger/rule-drafts/<draft>/rule.skeleton.yaml
 # passes (before/ fires, after/ silent)
 # 3. promote: move the rule into the pack's matching CATEGORY file
-#    (never a regression.yaml dump) with ruleid:/ok: fixture lines,
+#    in traust-engine (src/traust_engine/data/secure-code-audit/
+#    opengrep-rules/, the only copy; a traust-engine PR, then the traust
+#    engine-pin bump) — never a regression.yaml dump — with ruleid:/ok: fixture lines,
 #    keep the regression_of metadata (fingerprint + fix commit — that is
 #    what links a future firing back to the original resolved finding),
 #    then delete the draft dir.
@@ -153,7 +156,7 @@ Four resumable stages:
 #    matrix stage-2 votes, 0d fresh-only triage); rule-expressible vs
 #    not is decided deterministically and every "not" carries a reason
 python3 -m traust.cli sweep collect
-# 2. stage candidate rules for expressible classes with no harness-pack
+# 2. stage candidate rules for expressible classes with no pack
 #    coverage (dedup against pack rule ids + existing drafts); drafts
 #    land in rule-drafts/ per the conventions above, each citing its
 #    source confirmed finding(s) in metadata.generalized_from
@@ -233,7 +236,9 @@ any audit are listed separately — silence is not a pass.
 **Standing delegation (user, 2026-07-29):** scheduled agent runs of this
 skill proceed from the lane's delta report through rule authoring **and
 the full test-and-calibrate gate** — fixture `ruleid:`/`ok:` lines
-firing/silent, the whole-pack regression suite, TP-rediscovery
+firing/silent, the whole-pack regression suite (in traust-engine:
+`uv run pytest tests/test_bundled_rule_packs.py`, which runs `opengrep test`
+for every language and a default-scan canary), TP-rediscovery
 calibration against the corpus repos — WITHOUT asking for per-run
 approval. The mechanical gate is the promotion criterion: a rule that
 passes all three legs is promoted into the pack; one that does not is

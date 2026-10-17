@@ -142,7 +142,7 @@ def test_dry_run_writes_nothing(tmp_path, graph):
 
 
 def test_verify_identity_failure_downgrades_to_draft(tmp_path, graph, monkeypatch):
-    monkeypatch.setattr(csi, "verify_identity", lambda uid: False)
+    monkeypatch.setattr(csi, "verify_identity", lambda uid, directory=None: False)
     rc, scope = _run(tmp_path, graph, "--verify-identity")
     assert rc == 0
     import yaml
@@ -151,7 +151,7 @@ def test_verify_identity_failure_downgrades_to_draft(tmp_path, graph, monkeypatc
 
 
 def test_verify_identity_success_signs(tmp_path, graph, monkeypatch):
-    monkeypatch.setattr(csi, "verify_identity", lambda uid: True)
+    monkeypatch.setattr(csi, "verify_identity", lambda uid, directory=None: True)
     rc, scope = _run(tmp_path, graph, "--verify-identity")
     assert rc == 0
     import yaml

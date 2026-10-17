@@ -42,8 +42,10 @@ contract: [config/README.md](../config/README.md).
   against your OIDC provider, or `ledger auth local` where there is none
   (local tokens countersign only with `HARNESS_COUNTERSIGN_ALLOW_LOCAL=1`
   — see the countersign skill). Optionally an employee-directory command
-  (`LEDGER_DIRECTORY_COMMAND`) the ledger runs to confirm a signer is a
-  current member of your organisation.
+  (`ledger.yaml` → `identity.directory_command`) the ledger runs to confirm a
+  signer is a current member of your organisation. Signing and the optional
+  Ledger database are also `ledger.yaml` (copy `config/ledger.example.yaml`);
+  no `LAAS_*` variable configures a harness run.
 
 Scanner tools are per capability, not global: nothing beyond the baseline is
 needed until a skill calls for it. What each capability needs is the table in

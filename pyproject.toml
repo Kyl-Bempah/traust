@@ -7,7 +7,7 @@ name = "traust"
 # version must equal the VERSION file — check_docs_consistency.py
 # version-sync check fails the pre-push when they drift (and fails
 # closed if this field is removed)
-version = "0.14.0"
+version = "0.20.0"
 license = "Apache-2.0"
 description = "AI agent tooling for automated security audits of Red Hat Hybrid Platforms source code"
 requires-python = ">=3.11"
@@ -45,22 +45,23 @@ graph = [
     "tree-sitter-javascript",
 ]
 signing = ["sigstore>=4.0,<5.0"]
+# ledger.yaml with a dsn (Ledger database as the authority) needs the DB backend.
+ledger-db = ["traust-ledger[db]"]
 
 [project.scripts]
 traust = "traust.cli.__main__:main"
 
 [dependency-groups]
-dev = ["ruff>=0.6", "pytest-xdist>=3"]
+dev = ["ruff>=0.6", "pytest-xdist>=3", "traust-ledger[db]"]
 
 [tool.uv.sources]
-traust-contracts = { git = "https://github.com/smith-xyz/traust-contracts.git", rev = "104519fd18f724e121c492c160e3dc2d67408f90" }
-traust-engine = { git = "https://github.com/smith-xyz/traust-engine.git", rev = "248746baa45fd297d8a34b690cd043e547c7b69e" }
-traust-ledger = { git = "https://github.com/smith-xyz/traust-ledger.git", rev = "d28490aeb178c3369e84b0956616fbac059207f7" }
-# PLACEHOLDER (XWING-2223): local checkout of traust-core's feat/http-provider.
-# Once it merges, replace with:
-#   traust-core = { git = "https://github.com/traust-security/traust-core.git", rev = "<merge commit>" }
+traust-contracts = { git = "https://github.com/traust-security/traust-contracts.git", rev = "cb8bba8196f0d1203177cf7d920036a655dade0a" }
+traust-engine = { git = "https://github.com/traust-security/traust-engine.git", rev = "bc14d6af42c7c2d1b0db7b2f5a0cf31fd36bb603" }
+traust-ledger = { git = "https://github.com/traust-security/traust-ledger.git", rev = "7ce2516408390ca33ab9e78d00249b7a1003d600" }
+# PLACEHOLDER (XWING-2223): dummy value from traust-core#8.
+# Once it merges, replace with it's commit revision:
 # then `uv lock`. Do not merge this PR with the path source.
-traust-core = { path = "../traust-core-http", editable = true }
+traust-core = { git = "https://github.com/traust-security/traust-core.git", rev = "<merge commit>" }
 
 # Multi-skill CLIs live under src/traust/; harnessing/<skill>/ for single-skill
 # scripts. Install for deps + importable path helpers.

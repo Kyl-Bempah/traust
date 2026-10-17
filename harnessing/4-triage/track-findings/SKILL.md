@@ -243,7 +243,7 @@ state. The skill only auto-records what needs zero interpretation.
 2. **Verified identity**: the author's forge username maps to an employee
    by the ledger identity layer: `python3 -m traust.cli admin countersign` requires a
    cryptographically verified human OIDC token and cross-checks the holder
-   against the deployment's employee directory (`LEDGER_DIRECTORY_COMMAND`),
+   against the deployment's employee directory (`ledger.yaml` `identity.directory_command`),
    refusing to record otherwise.
 3. **Authority**: the author is one of the findings package's assigned
    owners (owners.csv / assign-findings-owners output) or a project
@@ -324,7 +324,7 @@ omit `occurred_at` and tooling falls back to `recorded_at`.
 (MCP); GitHub: PR review comments. For each comment: scan for finding IDs
 and disposition statements; apply the tier policy; for tier-1, resolve the
 author (username → the deployment's employee directory, if one is
-configured — `LEDGER_DIRECTORY_COMMAND`; authority via
+configured — `ledger.yaml` `identity.directory_command`; authority via
 owners.csv and the members API — escalation contacts are excluded:
 commenter access does not imply authority); event `source.ref` is the
 comment permalink; `rationale` is the verbatim quote.

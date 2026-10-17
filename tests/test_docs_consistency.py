@@ -365,3 +365,84 @@ class TestPhantomSkills(unittest.TestCase):
                 encoding="utf-8",
             )
             self.assertEqual(C.phantom_skill_failures(repo), [])
+
+
+class TestDocsIndexCoverage(unittest.TestCase):
+    """Every docs/ page must be reachable from the README: listed there, or
+    in the docs/README.md index that the README links."""
+
+    def _repo(self, td, readme, index=None, pages=("guide.md",)):
+        repo = Path(td)
+        (repo / "harnessing").mkdir()
+        (repo / "docs").mkdir()
+        for page in pages:
+            (repo / "docs" / page).write_text("# page\n", encoding="utf-8")
+        (repo / "README.md").write_text(readme, encoding="utf-8")
+        if index is not None:
+            (repo / "docs" / "README.md").write_text(index, encoding="utf-8")
+        return repo
+
+    @staticmethod
+    def _doc_failures(repo):
+        return [f for f in C.coverage_failures(repo) if "doc '" in f or "docs index" in f]
+
+    def test_page_listed_only_in_linked_index_passes(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo(td, "See [docs](docs/README.md).\n", index="- [guide](guide.md)\n")
+            self.assertEqual(self._doc_failures(repo), [])
+
+    def test_index_not_linked_from_readme_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo(td, "No docs link here.\n", index="- [guide](guide.md)\n")
+            out = self._doc_failures(repo)
+            self.assertTrue(any("docs index" in f for f in out), out)
+
+    def test_page_in_neither_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo(
+                td,
+                "See [docs](docs/README.md).\n",
+                index="- [other](other.md)\n",
+                pages=("guide.md", "other.md"),
+            )
+            out = self._doc_failures(repo)
+            self.assertTrue(any("doc 'guide.md' is not mentioned" in f for f in out), out)
+
+    def test_readme_listing_still_suffices_without_index(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = self._repo(td, "- [guide](docs/guide.md)\n")
+            self.assertEqual(self._doc_failures(repo), [])
+
+
+class TestSingleRulePack(unittest.TestCase):
+    """Rule packs live only in traust-engine; no copy or stale pointer here."""
+
+    def test_live_tree_has_no_rule_pack_copy(self):
+        self.assertEqual(C.rule_pack_copy_failures(), [])
+
+    def test_a_rule_pack_directory_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            (repo / "harnessing" / "3-audit" / "secure-code-audit" / "opengrep-rules").mkdir(
+                parents=True
+            )
+            out = C.rule_pack_copy_failures(repo)
+            self.assertTrue(any("rule-pack copy" in f for f in out), out)
+
+    def test_a_pointer_to_the_old_copy_fails(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            (repo / "docs").mkdir()
+            (repo / "docs" / "guide.md").write_text(
+                "See harnessing/3-audit/secure-code-audit/gitleaks-rules/x.toml\n", encoding="utf-8"
+            )
+            out = C.rule_pack_copy_failures(repo)
+            self.assertTrue(any("removed rule-pack copy" in f for f in out), out)
+
+    def test_changelog_history_is_exempt(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td)
+            (repo / "CHANGELOG.md").write_text(
+                "moved harnessing/3-audit/secure-code-audit/opengrep-rules\n", encoding="utf-8"
+            )
+            self.assertEqual(C.rule_pack_copy_failures(repo), [])

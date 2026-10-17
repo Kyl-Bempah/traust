@@ -521,14 +521,25 @@ def coverage_failures(repo: Path = REPO) -> list[str]:
     # suffices (placement is editorial).
     skill_pages = ("README.md", "docs/standalone-usage.md", "docs/campaign-workflow.md")
     schema_pages = ("README.md", "docs/tooling-and-structure-files.md")
+    doc_pages = ("README.md", "docs/README.md")
+    readme = repo / "README.md"
+    if (repo / "docs" / "README.md").is_file() and readme.is_file():
+        if "docs/README.md" not in readme.read_text(encoding="utf-8"):
+            failures.append(
+                "README.md: does not link the docs index docs/README.md — "
+                "pages listed only in the index are unreachable"
+            )
     for doc_rel, items, label, required in (
         (skill_pages, skills, "skill", None),
         # docs/skills.md is the reference: each skill needs its own section
         ("docs/skills.md", skills, "skill", "## {item}"),
         (schema_pages, schemas, "schema", None),
-        # every guide under docs/ must be reachable from the README —
-        # an unlinked doc is invisible to harness users
-        ("README.md", docs_md, "doc", None),
+        # every guide under docs/ must be reachable from the README — an
+        # unlinked doc is invisible to harness users. Since 2026-10-14 the
+        # README links one docs/ index (docs/README.md) instead of listing
+        # every page, so a mention in either suffices; the README → index
+        # link itself is checked below, keeping every page one hop away.
+        (doc_pages, docs_md, "doc", None),
     ):
         pages = (doc_rel,) if isinstance(doc_rel, str) else doc_rel
         present = [repo / p for p in pages if (repo / p).is_file()]
@@ -1001,8 +1012,7 @@ def cli_reference_failures(repo: Path = REPO) -> list[str]:
         extra = documented[group] - set(ops)
         if missing:
             failures.append(
-                f"docs/cli-reference.md: group `{group}` missing op(s) "
-                f"{', '.join(sorted(missing))}"
+                f"docs/cli-reference.md: group `{group}` missing op(s) {', '.join(sorted(missing))}"
             )
         if extra:
             failures.append(
@@ -1053,7 +1063,6 @@ def cli_op_failures(repo: Path = REPO) -> list[str]:
                 f"module rather than a command, name the module instead."
             )
     return failures
-
 
 
 # --- model-class index vs its sources -------------------------------------
@@ -1130,11 +1139,8 @@ def model_class_failures(repo: Path = REPO) -> list[str]:
             )
     for name, cls in sorted(source.items()):
         if name in real and name not in index:
-            out.append(
-                f"{_MODEL_CLASS_DOC}: '{name}' is {cls} in the usage tables but not indexed"
-            )
+            out.append(f"{_MODEL_CLASS_DOC}: '{name}' is {cls} in the usage tables but not indexed")
     return out
-
 
 
 # --- graph consumer lists vs what actually opens each graph ----------------
@@ -1197,7 +1203,6 @@ def graph_consumer_failures(repo: Path = REPO) -> list[str]:
     return out
 
 
-
 # --- docs/ is adopter-facing: no estate markers ---------------------------
 #
 # Everything under docs/ ships to adopters, so it must read as product
@@ -1229,8 +1234,48 @@ def docs_estate_marker_failures(repo: Path = REPO) -> list[str]:
     return failures
 
 
+# --- single rule pack ---------------------------------------------------------
+# The opengrep rule pack and the gitleaks config ship inside traust-engine
+# (traust_engine/data/secure-code-audit/), and every default run loads that
+# copy. A second copy in this repo is where rule work silently goes stale:
+# rule pack v1.8 sat in a harness copy that no default run read. Fail on a
+# rule-pack directory in the tree, or on a skill/doc that points at one.
+_RULE_PACK_DIRS = ("opengrep-rules", "gitleaks-rules")
+_OLD_PACK_REF = re.compile(r"harnessing/3-audit/secure-code-audit/(?:opengrep|gitleaks)-rules")
+_PACK_SCAN_SKIP = {".git", ".venv", "node_modules", "__pycache__", "fixtures", ".claude", ".crush"}
+# the gate and its own tests name the old path on purpose
+_PACK_SCAN_EXEMPT = {"src/traust/cli/check_docs_consistency.py", "tests/test_docs_consistency.py"}
+
+
+def rule_pack_copy_failures(repo: Path = REPO) -> list[str]:
+    failures = []
+    for path in sorted(repo.rglob("*")):
+        rel = path.relative_to(repo)
+        if any(part in _PACK_SCAN_SKIP for part in rel.parts):
+            continue
+        if path.is_dir() and path.name in _RULE_PACK_DIRS:
+            failures.append(
+                f"{rel.as_posix()}: a rule-pack copy in this repo — rules live only in "
+                "traust-engine (traust_engine/data/secure-code-audit/)"
+            )
+        elif path.is_file() and path.suffix in (".md", ".py", ".yaml", ".yml", ".toml"):
+            if path.name == "CHANGELOG.md" or rel.as_posix() in _PACK_SCAN_EXEMPT:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if _OLD_PACK_REF.search(text):
+                failures.append(
+                    f"{rel.as_posix()}: points at a removed rule-pack copy — reference "
+                    "traust_engine/data/secure-code-audit/ instead"
+                )
+    return failures
+
+
 CHECKS = [
     ("unresolved conflict markers", conflict_marker_failures),
+    ("single rule pack (rules live only in traust-engine)", rule_pack_copy_failures),
     ("generated skills reference (docs/skills.md matches the tree)", skills_reference_failures),
     (
         "config/ hygiene (shipped files + templates only, no estate markers)",
@@ -1253,7 +1298,10 @@ CHECKS = [
     ("CLI operation names (grouped invocations name a real op)", cli_op_failures),
     ("model-class index (docs/model-classes.md vs the usage tables)", model_class_failures),
     ("graph consumer lists (docs/graphs.md vs what opens each graph)", graph_consumer_failures),
-    ("docs/ estate neutrality (adopter-facing, no deployment vocabulary)", docs_estate_marker_failures),
+    (
+        "docs/ estate neutrality (adopter-facing, no deployment vocabulary)",
+        docs_estate_marker_failures,
+    ),
 ]
 
 

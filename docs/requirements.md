@@ -74,7 +74,7 @@ checks installs against); the per-skill mapping and every license are in
 | Fuzz (`create-fuzzing`) | The target language's toolchain: Go native, `atheris` (Python), `Jazzer.js` (JS/TS), `jazzer` (JVM, pinned), `cargo-fuzz` (Rust) |
 | Generate remediations on forks (`remediate-finding`) | A `GITHUB_TOKEN` with fork-push rights — fork setup goes through the GitHub REST API directly (`curl`), no `gh` needed. (`glab` belongs to `fleet-fix` MR automation) |
 | PQC readiness (`pqc-readiness`) | Rust toolchain (builds the pinned `pqc-scan` binary); Go toolchain + `callgraph`/`digraph` for call-graph reachability |
-| Sign disposition ledgers | `cosign`, plus the signing private key in your secret store (`LAAS_SIGNING_KEY_PATH`) — toolchain profile `ledger-signing`; see [signing.md](signing.md) |
+| Sign disposition ledgers | `cosign`, plus the signing private key in your secret store, referenced by `ledger.yaml` → `signing.key_path` — toolchain profile `ledger-signing`; see [signing.md](signing.md) |
 
 ## Network & access tiers
 

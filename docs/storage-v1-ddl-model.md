@@ -7,7 +7,7 @@
      To change the prose, edit
      src/traust_contracts/v1/storage/build_storage_ddl_model.py, then regenerate. -->
 
-**43 tables, 30 views, two dialects.** SQLite and
+**49 tables, 30 views, two dialects.** SQLite and
 PostgreSQL declare the same tables, the same column names, in the same
 order — verified by the generator, zero differences. Only TYPES diverge where the dialect
 demands it, shown as `sqlite|postgres` (`TEXT|JSONB`, `REAL|DOUBLE PRECISION`,
@@ -22,8 +22,8 @@ Legend: `+` primary key, arrows are declared foreign keys.
 classDiagram
   direction TB
   class artifact_evidence {
-    exact source bytes
-    SHA-256 keyed, never parsed
+    digest + byte_size
+    SHA-256 keyed, no payload
   }
   class artifact_binding {
     the caller's context
@@ -70,26 +70,72 @@ context its rows can carry.
 
 ---
 
-### Core — evidence, binding, metadata (3)
+### Core — evidence, binding, metadata (9)
 
 ```mermaid
 classDiagram
   direction LR
+  class product {
+    +TEXT product_id
+     TEXT slug
+     TEXT segment
+     TEXT|TIMESTAMPTZ registered_at
+  }
+  class repo {
+    +TEXT repo_id
+     TEXT repo_url
+     TEXT|TIMESTAMPTZ registered_at
+  }
+  class product_repo {
+    +TEXT product_repo_id
+     TEXT product_id
+     TEXT repo_id
+     TEXT ref
+     TEXT sub_service
+     TEXT resource_type
+     TEXT|TIMESTAMPTZ registered_at
+  }
+  class product_repo_version {
+    +TEXT product_repo_id
+    +TEXT version
+     TEXT category
+     TEXT|JSONB cluster_operators
+     TEXT|JSONB images
+     TEXT|TIMESTAMPTZ registered_at
+  }
+  class repo_owner {
+    +TEXT product_repo_id
+    +TEXT team
+     TEXT manager
+     TEXT|JSONB individuals
+     TEXT source
+     TEXT jira_project
+     TEXT jira_component
+     TEXT|TIMESTAMPTZ registered_at
+  }
   class artifact_binding {
     +TEXT binding_id
      TEXT artifact_digest
      TEXT artifact_name
+     TEXT artifact_role
      TEXT scope_id
      TEXT subject_id
      TEXT run_id
      TEXT layer_id
      TEXT supersedes_binding_id
      TEXT|TIMESTAMPTZ bound_at
+     TEXT product_repo_id
+     TEXT commit_sha
   }
   class artifact_evidence {
     +TEXT digest
-     BLOB|BYTEA payload
+     INTEGER|BIGINT byte_size
      TEXT|TIMESTAMPTZ first_ingested_at
+  }
+  class artifact_location {
+    +TEXT binding_id
+    +TEXT reference
+     TEXT|TIMESTAMPTZ registered_at
   }
   class traust_storage_meta {
      INTEGER id
@@ -97,7 +143,13 @@ classDiagram
      INTEGER revision
      TEXT|TIMESTAMPTZ applied_at
   }
+  product <-- product_repo : product_id
+  repo <-- product_repo : repo_id
+  product_repo <-- product_repo_version : product_repo_id
+  product_repo <-- repo_owner : product_repo_id
   artifact_evidence <-- artifact_binding : artifact_digest
+  product_repo <-- artifact_binding : product_repo_id
+  artifact_binding <-- artifact_location : binding_id
 ```
 
 ### Secondary fan-out projections — one row per repeated collection element (9)
@@ -177,35 +229,30 @@ classDiagram
      TEXT|JSONB override
      TEXT|JSONB n_pass_agreement
   }
-  class layer_event {
+  class portfolio_forge_facts {
     «fan-out»
-    +TEXT binding_id
-     TEXT artifact_digest
-    +TEXT event_id
-     TEXT finding_ref
-     TEXT fingerprint
-     TEXT fingerprint_algo
-     TEXT recorded_at
-     TEXT occurred_at
-     TEXT source_type
-     TEXT source_ref
-     TEXT actor_kind
-     TEXT validity
-     TEXT resolution
-     TEXT evidence_grade
-     INTEGER auto_accept_tier
-     TEXT rationale
-     TEXT harness_version
-     TEXT|JSONB evidence_refs
-     TEXT source_reported_by
-     TEXT severity
-     TEXT embargo
-     REAL|DOUBLE PRECISION risk_lambda
-     TEXT risk_weights_version
-     TEXT risk_tenancy_profile
-     TEXT risk_profile_source
-     TEXT|JSONB alias
-     TEXT|JSONB finding
+     TEXT identity
+     TEXT repo_key
+     TEXT repo_url
+     TEXT source_url
+     TEXT audited_sha
+     TEXT audit_date
+     BOOLEAN has_audit
+     TEXT status
+     TEXT pushed_at
+     BOOLEAN archived
+     TEXT default_branch
+     TEXT visibility
+     BOOLEAN fork
+     TEXT parent
+     BIGINT ahead_by
+     BIGINT changed_lines
+     BOOLEAN sensitive_changed
+     BIGINT sensitive_lines
+     BOOLEAN deps_only
+     BOOLEAN compare_truncated
+     TEXT|TIMESTAMPTZ observed_at
+     TEXT error
   }
   class remediation_source {
     «fan-out»
@@ -256,6 +303,7 @@ classDiagram
      TEXT|JSONB source_findings
      TEXT|JSONB passes
      TEXT remediation_effort
+     INTEGER blocked_external
      TEXT pqc_classification
      TEXT fingerprint_algo
      TEXT isolation_boundary
@@ -326,7 +374,6 @@ classDiagram
   artifact_binding <-- attack_chain : binding_id,artifact_digest
   artifact_binding <-- cloud_config_finding : binding_id,artifact_digest
   artifact_binding <-- compliance_result : binding_id,artifact_digest
-  artifact_binding <-- layer_event : binding_id,artifact_digest
   artifact_binding <-- remediation_source : binding_id,artifact_digest
   artifact_binding <-- report_finding : binding_id,artifact_digest
   artifact_binding <-- validation_finding : binding_id,artifact_digest
@@ -485,13 +532,35 @@ classDiagram
      TEXT|JSONB posture
      TEXT notes
   }
-  class layer_metadata {
+  class layer_event {
     +TEXT binding_id
      TEXT artifact_digest
-     TEXT repo
-     TEXT created_at
-     TEXT merkle_root
-     INTEGER|BIGINT merkle_epoch
+    +TEXT event_id
+     TEXT finding_ref
+     TEXT fingerprint
+     TEXT fingerprint_algo
+     TEXT recorded_at
+     TEXT occurred_at
+     TEXT source_type
+     TEXT source_ref
+     TEXT actor_kind
+     TEXT validity
+     TEXT resolution
+     TEXT evidence_grade
+     INTEGER auto_accept_tier
+     TEXT rationale
+     TEXT harness_version
+     TEXT|JSONB evidence_refs
+     TEXT source_reported_by
+     TEXT severity
+     TEXT embargo
+     REAL|DOUBLE PRECISION risk_lambda
+     TEXT risk_weights_version
+     TEXT risk_tenancy_profile
+     TEXT risk_profile_source
+     TEXT|JSONB alias
+     TEXT|JSONB finding
+     TEXT|JSONB restatement
   }
   class org_parameters {
     +TEXT binding_id
@@ -582,7 +651,7 @@ classDiagram
   artifact_binding <-- fleet_fix : binding_id,artifact_digest
   artifact_binding <-- impact_analysis : binding_id,artifact_digest
   artifact_binding <-- isolation_review : binding_id,artifact_digest
-  artifact_binding <-- layer_metadata : binding_id,artifact_digest
+  artifact_binding <-- layer_event : binding_id,artifact_digest
   artifact_binding <-- org_parameters : binding_id,artifact_digest
   artifact_binding <-- pqc_blockers : binding_id,artifact_digest
   artifact_binding <-- pqc_decision_tree : binding_id,artifact_digest
@@ -624,6 +693,7 @@ classDiagram
      TEXT|JSONB dependency_audit
      TEXT|JSONB negative_results
      TEXT|JSONB asvs_coverage
+     TEXT|JSONB review_surface_coverage
      TEXT|JSONB scanner_correlation
      TEXT|JSONB peach_isolation_review
      TEXT|JSONB disposition_summary
@@ -681,6 +751,13 @@ classDiagram
      TEXT asset
      TEXT impact
      TEXT likelihood
+     JSONB risk_rating
+     TEXT severity
+     REAL|DOUBLE PRECISION likelihood_score
+     TEXT likelihood_level
+     REAL|DOUBLE PRECISION impact_score
+     TEXT impact_level
+     TEXT impact_basis
      TEXT status
      TEXT controls
      JSONB actors

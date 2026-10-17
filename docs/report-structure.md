@@ -57,7 +57,7 @@ projections.
 | `passes` | No | Audit passes that independently surfaced this finding under dual-pass union-merge: `[1,2]` both passes, `[2]` second pass only. Single-pass reports omit it. |
 | `dependency` | No | Supply-chain provenance for a dependency finding (ecosystem, package, version, advisory), so the finding is self-describing and does not depend on a sibling impact-analysis artifact. |
 | `pqc_classification` | No | PQC relevance, assigned by table lookup against the PQC reference tables — never free-authored: `shor-key-establishment` \| `shor-signature` \| `clock-2030-parameter` \| `classically-broken` \| `hndl-exposure` \| `pqc-blocker-config` \| `pqc-adoption`. |
-| `remediation_effort` | No | `trivial` \| `moderate` \| `significant` \| `blocked-external` — derived deterministically per the PQC decision tree; emitted alongside `pqc_classification`. |
+| `remediation_effort` | No | `trivial` \| `moderate` \| `significant` \| `blocked-external` \| `xs` \| `s` \| `m` \| `l` \| `xl` — PQC findings use the first four, derived deterministically per the PQC decision tree and emitted alongside `pqc_classification`; the size labels are the shared effort scale. |
 | `validation_status` | No | `confirmed` \| `corrected` \| `false_positive` \| `not_verified` \| `hardening` — **ledger-set, never at audit time**. |
 | `disposition` | No | Present only on cumulative reports (`*-findings-current.json`): both disposition axes, conflict and awaiting-signoff flags, and event history, derived from the ledger. Never authored in a baseline. |
 | `effective_severity` | No | Present only on cumulative reports: equals a human severity override from the ledger when one exists, else the original severity. The original `severity` is never rewritten. |
@@ -71,6 +71,7 @@ projections.
 | `dependency_audit` | `prose` + `entries[]` (`package`, `version`, `status`, `notes`). |
 | `negative_results` | Areas verified clean: `area`, `result`, optional `files`. |
 | `asvs_coverage` | ASVS chapter coverage entries. |
+| `review_surface_coverage` | One entry per review surface (the `review_surface` enum in traust-contracts), each with a status from `review_surface_status`; required on `code`-profile audits from traust 0.20.0 — see deltas. |
 | `scanner_correlation` | Scanner tool results, including the judge decisions the rule-mining lane consumes. |
 | `peach_isolation_review` | Always emitted on `code` and `container` profiles — see deltas. |
 | `disposition_summary` | Cumulative reports only: counts per validity and resolution state, derived from the ledger. |
@@ -106,6 +107,12 @@ projections.
   archived-but-shipping components instead of misreading them as
   unremediated backlog. The container profile records the *source* repo's
   status as `source_repo_status`.
+- `review_surface_coverage` is **always emitted** (required from traust
+  0.20.0): one entry per review surface. `finding` entries name existing
+  findings in `finding_ids`, `negative` entries have a `negative_results`
+  entry whose `area` starts with the surface ID, and `not_assessed` entries
+  have a `coverage_gaps` entry with `tool: "review-surfaces"`. The
+  validator checks each against the report.
 - `peach_isolation_review` is **always emitted**: `{"applicable": false,
   "rationale": …}` for single-tenant components; full `interfaces[]` when
   multi-tenant. `peach_references` on findings only when applicable.

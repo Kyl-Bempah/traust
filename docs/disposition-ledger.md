@@ -399,7 +399,7 @@ python3 -m traust.cli admin countersign provides the human inbox over it:
   `HARNESS_COUNTERSIGN_ALLOW_LOCAL=1` (adopters with no identity
   provider). An employee-directory cross-check ("is this account
   current") is a deployment command the ledger runs
-  (`LEDGER_DIRECTORY_COMMAND`, see the ledger's service-identity doc),
+  (`ledger.yaml` → `identity.directory_command`),
   applied on every write path; it is not part of the identity proof. Mechanism and
   variables: the identity-verification section of
   [countersign SKILL.md](../harnessing/4-triage/countersign/SKILL.md). A blank
@@ -723,7 +723,7 @@ not one signature over the corpus and not one per checkpoint. See
 Division of labor, deliberately layered: **merkle root** = the event set
 and order are exactly what was written (and one 64-hex value a signature
 can attest — `ledger sign` / `ledger verify-signature`, cosign and OIDC backends,
-`LAAS_SIGNING_REQUIRED=1` to make an unsigned root a fail-closed **ERROR**
+`ledger.yaml` → `signing.required` to make an unsigned root a fail-closed **ERROR**
 — not a warning, and deleting a signature is therefore not a downgrade path; see
 [signing.md](signing.md)); **event_id** = each event's disposition
 content; **claim hashes** = the audited claims underneath. With leaf format 2
@@ -754,7 +754,7 @@ Every path below converges on one function. There is no second way in.
                                                                     │     algorithm / leaf_format=2
   re-audit           ───► rebaseline()  ⚠ re-points, does not stamp │
                                                                     ├─ 2. sign_if_configured()
-  a scan by itself   ───► (nothing — a scan is not an event)        │     LAAS_SIGNING_KEY_PATH
+  a scan by itself   ───► (nothing — a scan is not an event)        │     ledger.yaml signing.key_path
                                                                     │     → signed, format 4
                                                                     ▼
                                                     <repo>-findings-layer.json
@@ -791,12 +791,12 @@ Every path below converges on one function. There is no second way in.
 
 | `SignAttempt.status` | Cause | Writer behaviour |
 |---|---|---|
-| `unconfigured` | no `LAAS_SIGNING_KEY_PATH` (or no OIDC token for identity signing) | layer stamped and written, **unsigned**. Expected only on a workstation without the key; every layer in the corpus is signed, and `LAAS_SIGNING_REQUIRED=1` makes this state a validator ERROR |
+| `unconfigured` | no `ledger.yaml` `signing.key_path` (or no OIDC token for identity signing) | layer stamped and written, **unsigned**. Expected only on a workstation without the key; every layer in the corpus is signed, and `signing.required: true` makes this state an ERROR |
 | `signed` | key present, cosign succeeded | signature written to `metadata.merkle_root_signature` |
 | `failed` | key present, signing broke | **warns on stderr** — a configured-but-broken signer never degrades quietly |
 
-Enforcement is the validator's job, not the writer's: `LAAS_SIGNING_REQUIRED=1` makes an unsigned
-root a fail-closed ERROR. A writer that refused to write unsigned would stall ingestion instead.
+Enforcement is configuration: `ledger.yaml` → `signing.required: true` makes an unsigned root a
+fail-closed ERROR and makes the harness refuse to write a layer it cannot sign (see [signing.md](signing.md)).
 
 Full lifecycle, including where the key lives and how rotation works:
 [signing.md](signing.md). The producer side — every router and

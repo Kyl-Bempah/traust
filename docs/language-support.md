@@ -14,8 +14,8 @@ matters more than any single table cell:
    This is where languages differ, and where the tables below apply.
 
 Each cell names the tool that provides the capability, so the table can be
-checked against the tree: the rule pack under
-`harnessing/3-audit/secure-code-audit/opengrep-rules/`, the analyzers in
+checked against the tree: the rule pack bundled in traust-engine
+(`traust_engine/data/secure-code-audit/opengrep-rules/`), the analyzers in
 `traust_engine.impact`, the fuzz templates under
 `harnessing/6-fuzz/create-fuzzing/harnesses/_templates/`, and the tool rows in
 [external-dependencies.md](external-dependencies.md).
@@ -33,10 +33,10 @@ checked against the tree: the rule pack under
 | Portfolio-graph L4 symbols (tree-sitter) | ✅ | — | — | ✅ | ✅ (ts/tsx/js) | — | — | — |
 | Crypto / PQC census (`/pqc-readiness` capability notes) | ✅ Go stdlib | ✅ JDK | ✅ OpenSSL, BoringSSL, AWS-LC, GnuTLS, NSS | ✅ | ✅ Node | ✅ rustls, native-tls | — | RHEL crypto-policies; .NET and Ruby notes also ship |
 | Sanitizer micro-probe (deep-FN technique) | — | — | — | ✅ | — | — | — | — |
-| Route-guard enumerator | ✅ `net/http`, gorilla-mux, chi/echo/gin-style routers | — | — | ✅ Django / DRF | — | — | — | — |
+| Route-guard enumerator | ✅ `net/http`, gorilla-mux, chi/echo/gin-style routers | — | — | ✅ Django / DRF, Flask (incl. Flask-RESTful / flask-restx) | — | — | — | — |
 | Config/manifest deep tools | — | — | — | — | — | — | — | Kubernetes-hardening catalog, checkov (Terraform/CloudFormation/ARM+Bicep/Kubernetes/Helm/Dockerfile), config-matrix expander (Helm values, compose, Kubernetes env), YAML rule pack |
 
-Web frameworks the route-guard enumerator does not model (Express, Flask,
+Web frameworks the route-guard enumerator does not model (Express,
 FastAPI, Spring) are emitted as explicit coverage gaps so the audit's negative
 results can say so rather than imply coverage.
 
@@ -108,7 +108,7 @@ root filesystems and source trees.
   C read/recv/getenv families) exists as an opt-in tool pending calibration
   against a precision bar; no audit profile invokes it.
 - **Route-guard and sanitizer enumerators are narrow by design.** Route guards
-  cover Go HTTP routers and Django/DRF; the sanitizer probe is Python-only.
+  cover Go HTTP routers, Django/DRF and Flask; the sanitizer probe is Python-only.
   Other frameworks surface as coverage gaps.
 - **Symbol index depth varies.** The built-in extractor handles Go, Python,
   TypeScript/JavaScript, and shell definitions; every other language needs

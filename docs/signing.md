@@ -69,9 +69,9 @@ Three outcomes, none silent:
 | `unconfigured` | no key (or, for identity, no token) | layer stamped and written unsigned; expected only where the key is deliberately absent |
 | `failed` | key present, signing broke | warns on stderr; a configured-but-broken signer never degrades quietly |
 
-Enforcement is the validator's job, not the writer's: `LAAS_SIGNING_REQUIRED=1`
-makes an unsigned root a fail-closed ERROR at validation. A writer that refused
-to write unsigned would stall ingestion instead.
+Enforcement is configuration: `ledger.yaml` → `signing.required: true` makes an
+unsigned root a fail-closed ERROR at verification and makes the harness refuse
+to write a layer it cannot sign.
 
 ## Per-layer signing versus checkpoint signing
 
@@ -94,7 +94,7 @@ The private key is needed at exactly one operation: signing a root.
 | Verify root against events (tamper check) | none — recompute and compare |
 | **Sign the root** (write path or bulk) | **private key** |
 | Verify a signature | **public key only** |
-| Enforce "must be signed" (`LAAS_SIGNING_REQUIRED=1`) | none — policy |
+| Enforce "must be signed" (`ledger.yaml` → `signing.required`) | none — policy |
 
 Consequences:
 
@@ -112,8 +112,14 @@ Consequences:
 
 ## Configuration
 
-Two methods, selected by `LAAS_SIGNING_METHOD` for the write path or `--method`
-on the CLI:
+Harness signing is deployment configuration in `$TRAUST_CONFIG_HOME/ledger.yaml`
+→ `signing` (template: `config/ledger.example.yaml`; the schema is traust-contracts'
+`ledger.schema.json`). traust-engine builds the Ledger client from it
+explicitly, so **no `LAAS_SIGNING_*` variable affects a harness run** — mount the
+config instead. Without a `signing` section the harness writes unsigned layers
+and does not require signatures.
+
+Two methods:
 
 - **keypair** (default) — a cosign key pair. Recommended for air-gapped or
   disconnected environments. The public half is committed in
@@ -121,27 +127,24 @@ on the CLI:
   deployment's secret store and are mounted only into the write-path job.
 - **identity** — ephemeral keys bound to an OIDC identity via a short-lived
   certificate (sigstore). Requires the `signing` extra (`uv sync --extra signing`).
-  Token acquisition, in order: `LAAS_SIGNING_OIDC_TOKEN`, ambient CI detection,
-  then the interactive browser flow only if `LAAS_SIGNING_OIDC_INTERACTIVE=1`.
+  The token comes from ambient CI credential detection where the job runs.
 
-The write path reads `SigningConfig.from_env()` in traust-ledger. Every variable
-takes the `LAAS_SIGNING_` prefix; the older `HARNESS_SIGNING_` prefix is still
-honoured as a fallback.
-
-| Variable | Method | Meaning |
+| `ledger.yaml` key | Method | Meaning |
 |---|---|---|
-| `LAAS_SIGNING_METHOD` | both | `keypair` (default) or `identity` |
-| `LAAS_SIGNING_KEY_PATH` | keypair | path to the private key; unset → `unconfigured` |
-| `COSIGN_PASSWORD` | keypair | the key passphrase, read by cosign from the ambient environment — never by the harness, so it must be set where cosign runs |
-| `LAAS_SIGNING_OIDC_ISSUER`, `LAAS_SIGNING_OIDC_CLIENT_ID`, `LAAS_SIGNING_OIDC_TOKEN`, `LAAS_SIGNING_OIDC_INTERACTIVE`, `LAAS_SIGNING_EXPECTED_IDENTITY` | identity | provider, client, pre-minted token, interactive opt-in, expected certificate SAN |
-| `LAAS_SIGNING_CA_URL`, `LAAS_SIGNING_TLOG_URL` | identity | private certificate authority and transparency log for self-hosted sigstore; set both together |
-| `LAAS_SIGNING_REQUIRED` | verification | `1` makes an unsigned root a validation ERROR |
-| _(config-owned, no env)_ | verification | the validator uses `ctx.signing_pubkey` — `ledger-signing-key.pub` resolved from `$TRAUST_CONFIG_HOME`. It is **optional**: with no key configured, signature verification is skipped; set `LAAS_SIGNING_REQUIRED=1` to make an unsigned root an ERROR |
+| `signing.method` | both | `keypair` (default) or `identity` |
+| `signing.key_path` | keypair | absolute path of the private key; required when `required` is true |
+| `signing.required` | both | refuse to write an unsigned layer, and treat an unsigned root as a verification ERROR |
+| `signing.oidc_issuer`, `signing.oidc_client_id`, `signing.expected_identity` | identity | provider, client, expected certificate SAN |
+| `signing.ca_url`, `signing.tlog_url` | identity | private certificate authority and transparency log for self-hosted sigstore; set both together |
+| _(secret, never in config)_ `COSIGN_PASSWORD` | keypair | the key passphrase, read by cosign from the environment where it runs |
+| _(config-owned)_ `ledger-signing-key.pub` | verification | the validator uses `ctx.signing_pubkey` from `$TRAUST_CONFIG_HOME`. It is **optional**: with no key configured, signature verification is skipped |
 
-Where the key lives, operationally: in the environment of the job that runs
-the ledger writers, mounted from the secret store to the path
-`LAAS_SIGNING_KEY_PATH` names, with the passphrase exported as
-`COSIGN_PASSWORD`. Not on every machine that runs a scan.
+Where the key lives, operationally: mounted from the secret store into the job
+that runs the ledger writers, at the path `signing.key_path` names, with the
+passphrase exported as `COSIGN_PASSWORD`. Not on every machine that runs a scan.
+
+The standalone `ledger` CLI (`ledger sign`, `ledger verify`, below) is the
+Ledger's own tool and still reads its `LAAS_SIGNING_*` environment or flags.
 
 ## Commands
 

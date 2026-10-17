@@ -70,7 +70,7 @@ from traust_engine.ledger import (
     fingerprint,
 )
 
-from traust.context import add_config_home_arg, load_engine
+from traust.context import add_config_home_arg, add_ledger_binding_args, bind_ledger, load_engine
 from traust.lib.event_time import recorded_at_arg, report_occurred_at
 from traust.paths import HARNESS_ROOT
 
@@ -374,6 +374,7 @@ def rebuild_cumulative(audit_path: Path, layer_path: Path) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     add_config_home_arg(ap)
+    add_ledger_binding_args(ap)
     ap.add_argument("verification", type=Path, help=f"path to the *{VERIFICATION_SUFFIX} report")
     ap.add_argument(
         "--audit",
@@ -411,6 +412,7 @@ def main(argv=None) -> int:
         sys.exit(f"error: baseline audit report {audit_path} not found (pass --audit)")
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     result = route(vpath, audit_path, layer_path, args.recorded_at, args.dry_run, engine=engine)
     tag = " [dry-run]" if args.dry_run else ""
     if not result["regressions"]:

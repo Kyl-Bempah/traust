@@ -56,6 +56,7 @@ from traust_engine._util.layer_paths import (
 )
 from traust_engine.ledger import (
     FINGERPRINT_ALGO_CURRENT,
+    LedgerError,
     aliases_from_events,
     check_report_digest,
     compute_claim_hash,
@@ -68,6 +69,8 @@ from traust_engine.ledger import (
 
 from traust.context import (
     add_config_home_arg,
+    add_ledger_binding_args,
+    bind_ledger,
     default_findings_roots,
     load_engine,
 )
@@ -655,6 +658,7 @@ def main(argv=None):
         "and its disposition layer."
     )
     add_config_home_arg(parser)
+    add_ledger_binding_args(parser)
     parser.add_argument(
         "audit",
         help="Path to the baseline report: a *-security-audit.json, a "
@@ -676,6 +680,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     engine = load_engine(args.config_home)
+    bind_ledger(engine, args)
     audit_path = Path(args.audit)
     # P9b: this took a bare path and wrote a ledger wherever it was told,
     # including outside analysis-results/ and through a symlink, while three of
@@ -693,10 +698,14 @@ def main(argv=None):
             file=sys.stderr,
         )
         return 2
+    # The service reads the layer: the file in file mode, the bound database
+    # layer (refreshing the snapshot at layer_path) in database mode, so the
+    # claim check and the cumulative report see countersigns written elsewhere.
+    ledger = engine.ledger.service(data_dir=layer_path.parent)
     try:
         audit = json.loads(audit_path.read_text(encoding="utf-8"))
-        layer = json.loads(layer_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as e:
+        layer = ledger.read_layer_file(layer_path)
+    except (OSError, json.JSONDecodeError, LedgerError) as e:
         print(f"ERROR: cannot read inputs: {e}", file=sys.stderr)
         return 2
 
@@ -732,7 +741,6 @@ def main(argv=None):
     # the identity they observed is whatever the audit report records for that
     # finding. Existing values are never overwritten. The SDK stamps + signs in
     # one atomic write — the skill never writes the layer itself (Gate A16).
-    ledger = engine.ledger.service(data_dir=layer_path.parent)
     layer_path.parent.mkdir(parents=True, exist_ok=True)
     _stamped = ledger.stamp_event_identities(layer_path, fingerprint_index(audit))
     if _stamped:
