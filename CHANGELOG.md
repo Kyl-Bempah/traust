@@ -2,6 +2,18 @@
 
 All notable changes to Traust are documented here.
 
+## [0.27.2]
+
+- **Pins traust-engine 0.28.0** (rule pack v1.9).
+  - The LIKE-wildcard rule catches a bound f-string parameter such as
+    `(f"{owner}/{folder}/%",)`.
+  - SSRF taint follows `request.get_json()` and friends, and stops at a
+    database fetch.
+  - The new `traust-python-ssrf-stored-url` flags an outbound call to a URL
+    read from a database row or model field.
+  - A default `traust adapters opengrep` run now finds both planted defects
+    the `team-notes` recall fixture's audit run missed.
+
 ## [0.27.1]
 
 - **The config-matrix redacts credentials in every tier, not just Python
