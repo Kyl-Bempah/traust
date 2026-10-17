@@ -2,6 +2,34 @@
 
 All notable changes to Traust are documented here.
 
+## [0.27.1]
+
+- **The config-matrix redacts credentials in every tier, not just Python
+  settings.** A secure-code-audit run on the `team-notes` recall fixture
+  found the pre-scan copying a hardcoded `TOKEN_SIGNING_KEY` verbatim into
+  its artifact.
+  - Redaction moved into the shared triple builder, so Helm, Kustomize,
+    Compose, Kubernetes env and env-chain defaults are covered too. The
+    env-chain tier's sink expression, which quotes the source line, is
+    redacted as well.
+  - Names that count as credentials:
+    - any secret-class name, now also including `signing_key`,
+      `encryption_key`, `hmac_key` and `salt`
+    - any name whose last segment ends in key, token, salt, secret or
+      password at a word boundary (`SIGNING_KEY`, `apiToken`,
+      `session-secret`), but not `public_key`, `primary_key`,
+      `sort_key` and similar
+    - templated values (`${X}`, `{{ … }}`) are not literals and stay as
+      they are
+  - A redacted default is reported as `<hardcoded literal, N chars>`, marked
+    `literal_redacted`, and judged as a weak default.
+  - Verification toggles with words between the parts now count, for
+    example `VERIFY_WEBHOOK_SIGNATURES`.
+  - On five real estate repos, no triple was lost and none was
+    reclassified. 15 credential defaults were newly redacted, from env
+    fallbacks, Compose and Kubernetes env. None of the redacted values
+    appears anywhere in the new output.
+
 ## [0.27.0]
 
 - **`/recall-benchmark` supports seeded fixtures.** `build_canaries.py` now

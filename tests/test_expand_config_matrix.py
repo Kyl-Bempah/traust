@@ -440,3 +440,70 @@ def test_settings_are_classified_by_name_not_by_a_module_path_value(tmp_path):
     assert by["CACHE_URL"]["class"] == "dsn"
     bind = by["METRICS_EXPORT_ADDRESS"]
     assert bind["class"] == "listener" and bind.get("weak_default")
+
+
+# --------------------------------------------------------------------------
+# credentials are redacted in every tier, under any credential-shaped name
+# --------------------------------------------------------------------------
+
+
+def test_a_signing_key_and_a_verification_toggle_in_a_settings_class(tmp_path):
+    (tmp_path / "config.py").write_text(
+        "class Config:\n"
+        f"    TOKEN_SIGNING_KEY = '{FAKE_KEY}'  # gitleaks:allow\n"
+        "    VERIFY_WEBHOOK_SIGNATURES = False\n"
+    )
+    result = _expand(tmp_path)
+    by = {t["key"]: t for t in _settings(result)}
+    key = by["Config.TOKEN_SIGNING_KEY"]
+    assert key["literal_redacted"] and key["weak_default"] and key["judgement_required"]
+    flag = by["Config.VERIFY_WEBHOOK_SIGNATURES"]
+    assert flag["judgement_required"] and flag.get("weak_default")
+    assert FAKE_KEY not in json.dumps(result)
+
+
+def test_env_chain_defaults_are_redacted_too(tmp_path):
+    (tmp_path / "app.py").write_text(
+        f"import os\nTOKEN = os.environ.get('API_TOKEN', '{FAKE_KEY}')\n"
+    )
+    result = _expand(tmp_path)
+    (t,) = [t for t in result["triples"] if t["key"] == "API_TOKEN"]
+    assert t["literal_redacted"] and t["effective_default"].startswith("<hardcoded literal")
+    assert FAKE_KEY not in json.dumps(result)
+
+
+def test_helm_values_credentials_are_redacted(tmp_path):
+    chart = tmp_path / "chart"
+    (chart / "templates").mkdir(parents=True)
+    (chart / "Chart.yaml").write_text("name: c\nversion: 0.1.0\n")
+    (chart / "values.yaml").write_text(f"auth:\n  apiKey: {FAKE_KEY}\n  publicKey: abcdefgh\n")
+    result = _expand(tmp_path)
+    by = {t["key"]: t for t in result["triples"]}
+    assert by["auth.apiKey"]["literal_redacted"]
+    assert "literal_redacted" not in by["auth.publicKey"]
+    assert FAKE_KEY not in json.dumps(result)
+
+
+@pytest.mark.parametrize(
+    ("name", "credential"),
+    [
+        ("SIGNING_KEY", True),
+        ("apiToken", True),
+        ("session-secret", True),
+        ("PASSWORD_SALT", True),
+        ("KEY", True),
+        ("PUBLIC_KEY", False),
+        ("primary_key", False),
+        ("monkey", False),
+        ("MAX_TOKENS", False),
+        ("ACCESS_TOKEN_MINUTES", False),
+    ],
+)
+def test_credential_shaped_names(name, credential):
+    assert ecm._credential_name(name) is credential
+
+
+def test_templated_values_are_not_literals(tmp_path):
+    (tmp_path / "settings.py").write_text("API_TOKEN = '${API_TOKEN}'\n")
+    (t,) = _settings(_expand(tmp_path))
+    assert "literal_redacted" not in t and t["effective_default"] == "${API_TOKEN}"
