@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from tests.compliance_paths import compliance_configs_dir, compliance_skip_reason
+from traust.paths import HARNESS_ROOT
 from traust.paths import skill_dir
 
 
@@ -65,18 +65,16 @@ def test_unreadable_body_is_unknown_never_guessed():
 # ---------------- schema-gates the shipped registry ----------------
 
 
-def test_shipped_registry_validates():
+def test_registry_template_validates():
+    """The shipped template is schema-valid (the real registry is deployment config)."""
     jsonschema = pytest.importorskip("jsonschema")
     yaml = pytest.importorskip("yaml")
-    reg_p = compliance_configs_dir() / "adr-registry.yaml"
-    if not reg_p.is_file():
-        pytest.skip(compliance_skip_reason())
-    reg = yaml.safe_load(reg_p.read_text())
+    reg = yaml.safe_load((HARNESS_ROOT / "config" / "adr-registry.example.yaml").read_text())
     from traust_contracts.paths import schema_path as _sp
 
     schema = json.loads(_sp("adr-registry").read_text())
     jsonschema.validate(reg, schema)
-    assert len(reg["registers"]) >= 7
+    assert reg["registers"]
 
 
 # ---------------- superseded-citation gate ----------------

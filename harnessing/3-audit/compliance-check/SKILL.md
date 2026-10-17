@@ -26,8 +26,12 @@ observe is a counted `not_assessed`, never a guess. Plan of record:
 
 You will not find control IDs in this file — the control↔check binding
 is **policy data**, not prompt text
-(`progress-tracker/configs/compliance/compliance-mapping.yaml`,
-schema-gated; changing a mapping is a reviewed config change). The
+(`compliance-mapping.yaml`, shipped with traust-engine in
+`data/compliance/` beside the NIST spine, profiles and framework catalogs;
+schema-gated; changing a mapping is a reviewed change, and a deployment
+that needs a different one passes `--registry`). Org parameters
+(`org-parameters.yaml`) and the scope registry (`compliance-scope.yaml`) are
+deployment config in the config home. The
 chain for every deterministic verdict:
 
 ```

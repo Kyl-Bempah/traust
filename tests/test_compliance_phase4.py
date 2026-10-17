@@ -1,7 +1,9 @@
 """Phase 4 tests: idempotence gate, N-pass enforcement, precision."""
 
 import json
+import os
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -11,17 +13,19 @@ from traust.paths import skill_dir
 yaml = pytest.importorskip("yaml")
 pytest.importorskip("jsonschema")
 
-from tests.compliance_paths import (
-    compliance_configs_available,
-    compliance_configs_dir,
-    compliance_skip_reason,
+# The calibration snapshot is a real deployment's IaC inventory, so it is
+# deployment data: compliance/calibration/ in the operator's config home.
+# Only the two idempotence tests need it; everything else here runs offline.
+_OPERATOR_HOME = os.environ.get("TRAUST_OPERATOR_CONFIG_HOME")
+_CALIBRATION_SNAPSHOT = (
+    Path(_OPERATOR_HOME) / "compliance" / "calibration" / "iac-inventory-app-interface-mirror.json"
+    if _OPERATOR_HOME
+    else Path("/nonexistent")
 )
-
-_CALIBRATION_SNAPSHOT = compliance_configs_dir() / "calibration" / "iac-inventory-calibration.json"
-
-pytestmark = pytest.mark.skipif(
-    not compliance_configs_available() or not _CALIBRATION_SNAPSHOT.is_file(),
-    reason=compliance_skip_reason(),
+_needs_snapshot = pytest.mark.skipif(
+    not _CALIBRATION_SNAPSHOT.is_file(),
+    reason="no calibration snapshot in the operator config home "
+    "(compliance/calibration/iac-inventory-app-interface-mirror.json)",
 )
 
 
@@ -51,6 +55,7 @@ prec = _load("compliance_precision")
 # ---------------- idempotence (offline, real calibration snapshot) ----
 
 
+@_needs_snapshot
 def test_idempotence_over_calibration_snapshot(tmp_path):
     snap = _CALIBRATION_SNAPSHOT
     assert snap.is_file(), "calibration snapshot missing"
@@ -58,6 +63,7 @@ def test_idempotence_over_calibration_snapshot(tmp_path):
     assert rc == 0
 
 
+@_needs_snapshot
 def test_idempotence_gate_detects_divergence(tmp_path, monkeypatch):
     snap = _CALIBRATION_SNAPSHOT
     calls = {"n": 0}

@@ -42,6 +42,7 @@ import sys
 from pathlib import Path
 
 from traust_contracts.paths import schema_dir
+from traust_engine.assets import compliance_data_dir
 from traust_engine.corpus.resolver import split_ref
 
 from traust.context import (
@@ -71,6 +72,16 @@ def _ar(ws: Path) -> Path:
 
 def _pt(ws: Path) -> Path:
     return _run_pt if _run_pt is not None else ws / "progress-tracker"
+
+
+def _config_file(name: str) -> Path | None:
+    """A deployment config file in the config home ($TRAUST_CONFIG_HOME), or None."""
+    return optional_config_path(name)
+
+
+def _compliance_data() -> Path:
+    """The compliance reference data that ships inside traust-engine."""
+    return compliance_data_dir()
 
 
 def _module_file(module: str) -> Path | None:
@@ -223,7 +234,7 @@ REACHABILITY_COVERAGE_THRESHOLD = 50
 # Dated watch register for the un-mechanizable revisit triggers (OSV
 # call-graph data, an Apache-licensed engine maturing) — see
 # check_reachability_coverage leg 2.
-REACHABILITY_WATCH_REL = "progress-tracker/configs/reachability-watch.yaml"
+REACHABILITY_WATCH = "reachability-watch.yaml"  # in the config home
 # The portfolio language cache (loc-dashboard / build_portfolio_graph
 # language harvest): one JSON object per line,
 # {"repo": "org/name", "languages": {"Go": <bytes>, ...}}.
@@ -855,8 +866,8 @@ def check_ref_provenance(ws: Path, engine) -> list[dict]:
 
 
 def check_adr_registry(ws: Path) -> list[dict]:
-    reg_p = _pt(ws) / "configs" / "compliance" / "adr-registry.yaml"
-    if not reg_p.is_file():
+    reg_p = _config_file("adr-registry.yaml")
+    if reg_p is None:
         return [item("adr-registry", "pending", "not built yet (compliance Phase 2c)")]
     if yaml is None:
         return [item("adr-registry", "unavailable", "PyYAML missing")]
@@ -1946,7 +1957,7 @@ def check_framework_upstream(ws: Path) -> list[dict]:
     revised the catalog/baselines — review before re-deriving (a moved
     HEAD is often unrelated content, so this is stale-for-review, not
     auto-refresh)."""
-    prov_p = ws / "progress-tracker/configs/compliance" / "provenance.json"
+    prov_p = _compliance_data() / "provenance.json"
     if not prov_p.is_file():
         return [item("framework-spine:upstream", "pending", "no compliance provenance yet")]
     try:
@@ -1976,7 +1987,7 @@ def check_framework_upstream(ws: Path) -> list[dict]:
                 f"{head[:12]} — check whether the SP800-53 rev5 files "
                 "changed before re-deriving",
                 "review upstream diff; if the rev5 files moved, re-derive "
-                "per configs/compliance/README.md and update provenance",
+                "per traust-engine's data/compliance/README.md and update provenance",
             )
         ]
     return [
@@ -1990,15 +2001,15 @@ def check_framework_upstream(ws: Path) -> list[dict]:
 
 def check_policy_provenance(ws: Path) -> list[dict]:
     out = []
-    comp = ws / "progress-tracker/configs/compliance"
+    comp = _compliance_data()
     targets = [
         (
             "sla-policy",
-            ws / "progress-tracker/configs/sla-policy.yaml",
+            _config_file("sla-policy.yaml"),
             lambda d: (d.get("source") or {}).get("retrieved"),
         ),
         ("compliance-spine", comp / "provenance.json", lambda d: d.get("retrieved")),
-        ("org-parameters", comp / "org-parameters.yaml", lambda d: d.get("declared_on")),
+        ("org-parameters", _config_file("org-parameters.yaml"), lambda d: d.get("declared_on")),
         # harness-authored framework catalogs: ids-only files whose
         # `reviewed` date is the last check against the living
         # framework (PCI SSC revisions, TSC updates, EUR-Lex
@@ -2009,7 +2020,7 @@ def check_policy_provenance(ws: Path) -> list[dict]:
         ("catalog-gdpr", comp / "catalog-gdpr-technical.yaml", lambda d: d.get("reviewed")),
     ]
     for name, path, getter in targets:
-        if not path.is_file():
+        if path is None or not path.is_file():
             out.append(item(f"provenance:{name}", "pending", "config absent"))
             continue
         try:
@@ -3386,7 +3397,7 @@ def check_reachability_coverage(ws: Path) -> list[dict]:
                     "wire an engine behind a facts-only wrapper validated "
                     "against a ground-truth corpus (the Java/C pattern, "
                     "docs/reachability.md), or record the deliberate "
-                    "non-coverage decision in " + REACHABILITY_WATCH_REL,
+                    "non-coverage decision in the config home's " + REACHABILITY_WATCH,
                 )
             )
         if not flagged:
@@ -3402,19 +3413,19 @@ def check_reachability_coverage(ws: Path) -> list[dict]:
             )
 
     # Leg 2 — the watch register's review clock.
-    reg_p = ws / REACHABILITY_WATCH_REL
+    reg_p = _config_file(REACHABILITY_WATCH)
     refresh = (
-        "re-check the watch conditions in "
-        + REACHABILITY_WATCH_REL
+        "re-check the watch conditions in the config home's "
+        + REACHABILITY_WATCH
         + " and bump its `reviewed` date (or act on a trigger "
         "that has fired)"
     )
-    if not reg_p.is_file():
+    if reg_p is None:
         out.append(
             item(
                 "reachability-watch:review",
                 "pending",
-                f"no watch register at {REACHABILITY_WATCH_REL}",
+                f"no watch register ({REACHABILITY_WATCH} in the config home)",
                 refresh,
             )
         )
@@ -3432,9 +3443,7 @@ def check_reachability_coverage(ws: Path) -> list[dict]:
         reg = yaml.safe_load(reg_p.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
         out.append(
-            item(
-                "reachability-watch:review", "unavailable", f"{REACHABILITY_WATCH_REL} unparseable"
-            )
+            item("reachability-watch:review", "unavailable", f"{REACHABILITY_WATCH} unparseable")
         )
         return out
     reviewed = reg.get("reviewed")
@@ -3798,7 +3807,6 @@ def _plugin_version_from_manifest(doc: dict, name: str, url: str) -> tuple[str |
         if plugin.get("name") == name:
             return plugin.get("version"), None
     return None, f"{name} is not listed in {url}'s marketplace.json"
-
 
 
 CHECKS = (

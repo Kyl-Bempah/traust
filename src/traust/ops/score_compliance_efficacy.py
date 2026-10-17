@@ -17,7 +17,7 @@ Three failure classes, in order of severity:
   WRONG VERDICT computed verdict != constructed truth
   INCOHERENCE   declared crosswalk pairs disagree
 
-Fixture: progress-tracker/configs/compliance/efficacy/seeded-target/
+Fixture: tests/fixtures/compliance/efficacy/seeded-target/ in the harness repo
 (snapshots + org-parameters + expected-verdicts.yaml). The findings-db
 leg materializes from findings-rows.json into a temp sqlite so no
 binary is committed.
@@ -211,7 +211,9 @@ def main(argv=None) -> int:
 
     engine = load_engine(args.config_home)
     tracker = progress_tracker_dir(engine)
-    fixture = args.fixture or (tracker / "configs" / "compliance" / "efficacy" / "seeded-target")
+    fixture = args.fixture or (
+        HARNESS_ROOT / "tests" / "fixtures" / "compliance" / "efficacy" / "seeded-target"
+    )
     out_dir = args.out_dir or (tracker / "metrics" / "dashboards" / "compliance")
     if not fixture.is_dir():
         sys.exit(f"fixture not found: {fixture}")

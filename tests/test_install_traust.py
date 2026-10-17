@@ -34,7 +34,18 @@ def test_noninteractive_install_copies_every_copyable_template(tmp_path):
     # (model-registry + the MANIFEST-required feeds/external-tools).
     # storage.yaml / ledger.yaml are opt-in: a copied example DSN would switch the
     # deployment to a database that does not exist, so they are never auto-copied.
-    opt_in = {"storage.yaml", "ledger.yaml"}
+    # The declared-policy files are opt-in too: a copied placeholder SLA policy,
+    # region allowlist, ADR pin, watch register or answer key would make the
+    # harness report on values nobody declared.
+    opt_in = {
+        "storage.yaml",
+        "ledger.yaml",
+        "sla-policy.yaml",
+        "org-parameters.yaml",
+        "adr-registry.yaml",
+        "reachability-watch.yaml",
+        "benchmark-targets.yaml",
+    }
     expected = sorted(
         [
             t.name.replace(".example", "")

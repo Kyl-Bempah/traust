@@ -47,13 +47,14 @@ import sys
 import uuid
 from pathlib import Path
 
+from traust_engine.assets import compliance_data_dir
+
 from traust.context import (
     add_config_home_arg,
     findings_db,
     load_engine,
-    progress_tracker_dir,
 )
-from traust.paths import HARNESS_ROOT
+from traust.paths import HARNESS_ROOT, config_path
 
 try:
     import yaml
@@ -458,10 +459,11 @@ def main(argv=None) -> int:
     ap.add_argument("--oscal", action="store_true")
     args = ap.parse_args(argv)
     engine = load_engine(args.config_home)
-    configs = progress_tracker_dir(engine) / "configs" / "compliance"
-    args.scope_registry = args.scope_registry or (configs / "compliance-scope.yaml")
-    args.registry = args.registry or (configs / "compliance-mapping.yaml")
-    args.org_parameters = args.org_parameters or (configs / "org-parameters.yaml")
+    # Scope and org parameters are deployment config (the config home); the
+    # control-to-check mapping ships with traust-engine.
+    args.scope_registry = args.scope_registry or engine.compliance.scope_registry()
+    args.registry = args.registry or (compliance_data_dir() / "compliance-mapping.yaml")
+    args.org_parameters = args.org_parameters or config_path("org-parameters.yaml")
     args.findings_db = args.findings_db or findings_db(engine)
     if yaml is None:
         sys.exit("PyYAML required")

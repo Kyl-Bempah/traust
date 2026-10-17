@@ -15,7 +15,7 @@ out-dir paths), and compares:
 Any divergence prints a unified summary of the differing controls and
 exits 1. This is a CALIBRATION gate: run it after engine/registry
 changes and in CI over the committed calibration snapshot
-(progress-tracker/configs/compliance/calibration/) — a real
+(compliance/calibration/ in the deployment config home) — a real
 iac_declared snapshot from the deployment's public IaC mirror at a
 pinned commit, so the gate exercises real-shaped data offline.
 
