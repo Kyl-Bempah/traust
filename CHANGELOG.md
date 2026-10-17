@@ -2,6 +2,16 @@
 
 All notable changes to Traust are documented here.
 
+## [0.28.1]
+
+- **The docs gate no longer checks the old GitLab group page.**
+  `check docs-consistency` used to read `../gitlab-profile/README.md` when
+  it sat next to the harness checkout, and failed when that page's
+  version or skill count disagreed with this repo. Traust lives on GitHub
+  now, so a stale GitLab page could fail the harness's tests and force a
+  GitLab change for a GitHub release. The check, its tests and the
+  `check-harness-docs` sections that described it are removed.
+
 ## [0.28.0]
 
 - **Pins traust-engine 0.29.0.** The rendered threat-model Markdown now
