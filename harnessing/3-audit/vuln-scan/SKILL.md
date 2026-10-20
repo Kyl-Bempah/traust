@@ -282,8 +282,8 @@ as `"ran"`/`"skipped: <reason>"` in
 - `python3 -m traust.cli adapters osv --repo <target-dir>` (OSV API) —
   only when the scope package says `deps_manifests_changed: true`.
   `status: degraded` (exit 3) is recorded as
-  `"osv": "degraded: <counts>"`, `status: failed` (exit 2) as
-  `"osv": "failed: <failure.status>"`; neither is ever clean.
+  `"osv-scanner": "degraded: <counts>"`, `status: failed` (exit 2) as
+  `"osv-scanner": "failed: <failure.status>"`; neither is ever clean.
 
 ### Dedupe against the baseline
 

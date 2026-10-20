@@ -273,7 +273,7 @@ default for every repository**, not just high-value targets.
    and the other flagged is a finding, not a negative.
 
 Deterministic pre-scans (opengrep, checkov catalog, syft/grype,
-osv, fork-advisory-lag, gitleaks) run **once** — their facts
+osv-scanner, fork-advisory-lag, gitleaks) run **once** — their facts
 seed both passes.
 Single-pass execution remains acceptable only when the invoker
 explicitly requests it (record `"audit_passes": 1` in
@@ -889,7 +889,9 @@ Contract (identical in spirit to the govulncheck stage):
 2. Cite candidate advisories (OSV id, package, found/fixed versions,
    lockfile source) as evidence in dependency findings you *do* confirm;
    record the run in `metadata.additional.deterministic_steps` and its
-   `scanner_correlation` entries like the other pre-scans. For
+   `scanner_correlation` entries like the other pre-scans. The step's key
+   is `osv-scanner` whichever path ran (the OSV API or, air-gapped, the
+   binary): it is the key the report schema and earlier reports use. For
    prioritization context, `harnessing/3-audit/secure-code-audit/scripts/enrich_findings_cves.py --in
    <artifact>` joins EPSS scores and CISA-KEV membership onto every
    CVE-bearing candidate (an enrichment tagger — routes attention, never
@@ -897,13 +899,13 @@ Contract (identical in spirit to the govulncheck stage):
 3. **Read `metadata.status`.** Exit 3 and `status: degraded` mean some
    lookups were never answered (`lookup_issues`, `packages_unanswered`) or
    some manifests didn't parse (`manifests_unparsed`). Record
-   `"osv": "degraded: <counts>"` in `deterministic_steps` and a
+   `"osv-scanner": "degraded: <counts>"` in `deterministic_steps` and a
    `metadata.additional.coverage_gaps` entry
-   (`{"tool": "osv", "system": "dependencies", "reason": ...}`). The
+   (`{"tool": "osv-scanner", "system": "dependencies", "reason": ...}`). The
    unanswered packages are **not** clean. Exit 2 and `status: failed`
    (an `ERROR:` line; `metadata.failure` says why: the API unreachable,
    or osv-scanner or its database missing when air-gapped) mean **no
-   lookups at all**: record `"osv": "failed: <failure.status>"` plus the
+   lookups at all**: record `"osv-scanner": "failed: <failure.status>"` plus the
    same coverage gap, and make no dependency conclusion.
 4. **`transitive_coverage: partial`** means some manifests have no
    lockfile (`unresolved_manifests`): their direct declarations were looked
