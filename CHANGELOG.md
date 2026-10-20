@@ -2,6 +2,16 @@
 
 All notable changes to Traust are documented here.
 
+## [0.32.1]
+
+- **The dependency pre-scan's report key is `osv-scanner` again.** 0.31.0
+  renamed it to `osv` in `/secure-code-audit` and `/vuln-scan` (the
+  `deterministic_steps` key and the `coverage_gaps` tool), out of step with
+  the report schema's description, `docs/report-structure.md` and every
+  earlier report. The key names the step, not the path: it stays
+  `osv-scanner` whether the OSV API or, air-gapped, the binary ran. No
+  report on record used `osv`.
+
 ## [0.32.0]
 
 - **osv-scanner leaves the default install** (scanner-currency step 6,
