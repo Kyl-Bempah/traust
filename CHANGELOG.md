@@ -2,6 +2,28 @@
 
 All notable changes to Traust are documented here.
 
+## [0.32.0]
+
+- **osv-scanner leaves the default install** (scanner-currency step 6,
+  owner decisions 2026-10-20). OSV is queried through its API; air-gapped
+  deployments provide osv-scanner and its offline database themselves.
+  Pins traust-engine 0.34.0, which no longer fetches or tracks that
+  database.
+  - `install-toolchain.sh`: osv-scanner is in no profile and is no longer
+    downloaded; `setup` no longer populates its database.
+  - `Containerfile.toolchain` and `containerfile-build-args.py`: no
+    osv-scanner binary, build arg or database. An air-gapped deployment
+    extends the image.
+  - **The pin stays, as the tested version for air-gapped adopters**:
+    `config/external-tools.yaml` marks the row `provided_by: adopter` with
+    `consumers: []`, and advances `expected` 2.4.0 → 2.7.0 (the latest
+    release; the air-gapped smoke in 0.31.0 ran 2.7.0). When osv-scanner
+    is absent, the `external-tools:osv-scanner` drift row compares the pin
+    itself with upstream (`fresh` / `stale`) instead of reporting
+    `pending`; when it is installed, the usual checks apply.
+  - Docs: `docs/setup.md` (install table, container image, air-gapped
+    steps) and `PROCESS.md`.
+
 ## [0.31.0]
 
 - **OSV through the API; osv-scanner is no longer needed for dependency
