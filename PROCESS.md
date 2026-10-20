@@ -94,7 +94,7 @@ industry-standard frameworks: OWASP ASVS v5.0, OWASP Kubernetes Top 10
 OpenSSF Scorecard, the SEI CERT coding standards
 (language-conditional), and the PEACH tenant-isolation framework.
 Dual-pass execution is the campaign default; deterministic pre-scans
-(opengrep, gitleaks, osv-scanner, syft/grype, checkov, k8s-hardening)
+(opengrep, gitleaks, the OSV dependency pre-scan, syft/grype, checkov, k8s-hardening)
 seed both passes and are recorded under `deterministic_steps`.
 
 Batch orchestration is driven by the continuous-operations router's

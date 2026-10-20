@@ -29,7 +29,6 @@ NAME_TO_ARG = {
     "gitleaks": "GITLEAKS_VERSION",
     "syft": "SYFT_VERSION",
     "grype": "GRYPE_VERSION",
-    "osv-scanner": "OSV_SCANNER_VERSION",
     "cosign": "COSIGN_VERSION",
     "govulncheck": "GOVULNCHECK_VERSION",
     "skopeo": "SKOPEO_VERSION",

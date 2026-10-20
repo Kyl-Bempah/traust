@@ -625,7 +625,13 @@ def test_rescan_worklist_unparseable_is_unavailable(tmp_path):
 
 
 def _patch_tools(
-    monkeypatch, *, which=True, local="1.0.0", upstream=("1.0.0", None), expected=None
+    monkeypatch,
+    *,
+    which=True,
+    local="1.0.0",
+    upstream=("1.0.0", None),
+    expected=None,
+    adopter=False,
 ):
     monkeypatch.setattr(
         cd,
@@ -638,6 +644,7 @@ def _patch_tools(
                 "ref": "example/fakescan",
                 "version_re": cd._SEMVER_RE,
                 "expected": expected,
+                "adopter": adopter,
             }
         ],
     )
@@ -653,6 +660,35 @@ def test_external_tools_missing_is_pending(tmp_path, monkeypatch):
     items = cd.check_external_tools(_mk_ws(tmp_path))
     assert items[0]["item"] == "external-tools:fakescan"
     assert items[0]["status"] == "pending"
+
+
+def test_an_absent_adopter_tool_is_not_pending_and_its_pin_is_checked(tmp_path, monkeypatch):
+    _patch_tools(monkeypatch, which=False, adopter=True, expected="2.7.0", upstream=("2.7.0", None))
+    row = cd.check_external_tools(_mk_ws(tmp_path))[0]
+    assert row["status"] == "fresh"
+    assert "adopter-provided" in row["detail"]
+
+
+def test_an_adopter_tool_pin_behind_upstream_is_stale(tmp_path, monkeypatch):
+    old = cd._now() - datetime.timedelta(days=cd.EXTERNAL_TOOL_LAG_GRACE_DAYS + 10)
+    _patch_tools(monkeypatch, which=False, adopter=True, expected="2.4.0", upstream=("2.7.0", old))
+    row = cd.check_external_tools(_mk_ws(tmp_path))[0]
+    assert row["status"] == "stale"
+    assert "advance `expected`" in row["refresh"]
+
+
+def test_an_installed_adopter_tool_is_checked_like_any_other(tmp_path, monkeypatch):
+    _patch_tools(monkeypatch, adopter=True, local="2.4.0", expected="2.7.0")
+    assert cd.check_external_tools(_mk_ws(tmp_path))[0]["status"] == "drift"
+
+
+def test_the_shipped_osv_scanner_row_is_adopter_provided_and_in_no_profile():
+    import yaml
+
+    rows = yaml.safe_load((cd.HARNESS_ROOT / "config" / "external-tools.yaml").read_text())
+    osv = next(t for t in rows["tools"] if t["name"] == "osv-scanner")
+    assert osv["provided_by"] == "adopter"
+    assert osv["consumers"] == []
 
 
 def test_external_tools_current_is_fresh(tmp_path, monkeypatch):

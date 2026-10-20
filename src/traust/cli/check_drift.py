@@ -1300,6 +1300,9 @@ def _load_external_tools() -> tuple[list[dict] | None, str | None]:
                 "ref": up.get("ref"),
                 "version_re": t.get("version_regex") or _SEMVER_RE,
                 "expected": t.get("expected"),
+                # adopter-provided (osv-scanner, air-gapped only): never
+                # installed by the harness, so absence is expected
+                "adopter": t.get("provided_by") == "adopter",
             }
         )
     return out, None
@@ -1383,6 +1386,50 @@ def _latest_upstream(kind: str, ref: str) -> tuple[str, datetime.datetime | None
     return ".".join(m.groups()), _parse_iso((when or "")[:19] + "Z")
 
 
+def _adopter_pin_row(iname: str, name: str, expected, kind: str, ref: str) -> dict:
+    """An adopter-provided tool that isn't installed here: check the pin itself.
+
+    The harness never installs it, so absence is normal. What the harness
+    does own is `expected`, the version it has tested and tells adopters to
+    install; that pin is compared with the latest upstream release so it
+    stays current.
+    """
+    latest = _latest_upstream(kind, ref)
+    if latest is None or not expected:
+        return item(
+            iname,
+            "info",
+            f"adopter-provided, not installed here (tested pin {expected}); "
+            f"cannot reach {kind} to compare the pin",
+        )
+    latest_ver, published = latest
+    try:
+        ev = tuple(int(x) for x in str(expected).split("."))
+        uv = tuple(int(x) for x in latest_ver.split("."))
+    except ValueError:
+        return item(iname, "info", f"adopter-provided, not installed here (pin {expected})")
+    if ev >= uv:
+        return item(
+            iname, "fresh", f"adopter-provided; tested pin {expected} == latest {latest_ver}"
+        )
+    age = _age_days(published) if published else None
+    if age is not None and age <= EXTERNAL_TOOL_LAG_GRACE_DAYS:
+        return item(
+            iname,
+            "fresh",
+            f"adopter-provided; tested pin {expected} < latest {latest_ver}, released "
+            f"{age:.0f}d ago (grace {EXTERNAL_TOOL_LAG_GRACE_DAYS}d)",
+        )
+    return item(
+        iname,
+        "stale",
+        f"adopter-provided; tested pin {expected} behind latest {latest_ver}"
+        + (f" (released {age:.0f}d ago)" if age is not None else ""),
+        f'test {name} {latest_ver} (docs/setup.md "Air-gapped OSV scanning") and advance '
+        "`expected` in config/external-tools.yaml (deliberate config change)",
+    )
+
+
 def check_external_tools(ws: Path) -> list[dict]:
     """Installed external deterministic scanners vs their latest
     upstream release. These tools are PATH-invoked and unpinned by
@@ -1425,6 +1472,9 @@ def check_external_tools(ws: Path) -> list[dict]:
                     "declared for this tool, so freshness is not claimed",
                 )
             )
+            continue
+        if shutil.which(argv[0]) is None and spec.get("adopter"):
+            out.append(_adopter_pin_row(iname, name, expected, kind, ref))
             continue
         if shutil.which(argv[0]) is None:
             out.append(

@@ -117,7 +117,7 @@ Step by step, if you need to install by hand:
 | `gitleaks` | github.com/gitleaks/gitleaks | yes |
 | `syft` | github.com/anchore/syft | yes |
 | `grype` | github.com/anchore/grype | yes |
-| `osv-scanner` | github.com/google/osv-scanner — **only for air-gapped OSV scanning**; the default dependency pre-scan uses the OSV API (see below) | no (upstream publishes none) |
+| `osv-scanner` | github.com/google/osv-scanner — **air-gapped OSV scanning only, and not installed by the script or the image**: you install it at the pin in `config/external-tools.yaml` (see below). The default dependency pre-scan uses the OSV API | no (upstream publishes none) |
 | `cosign` | github.com/sigstore/cosign | yes |
 | `govulncheck` | `go install golang.org/x/vuln/cmd/govulncheck@<pin>` (needs a Go toolchain) | Go module checksum DB |
 
@@ -165,8 +165,10 @@ The pre-scan then runs **osv-scanner offline** (`--offline`) against a local
 OSV database. **You provide both the binary and the database**: the harness
 does not install them, and continuous operations do not keep them current.
 
-1. Install osv-scanner (pin from `config/external-tools.yaml`) on the
-   scanning host.
+1. Install osv-scanner on the scanning host (or into your extension of the
+   toolchain image) at the version pinned in `config/external-tools.yaml`:
+   the tested version, kept current by the `external-tools:osv-scanner`
+   drift row. `install-toolchain.sh` and the image do not install it.
 2. On a connected host, download the database:
    `osv-scanner scan source --offline-vulnerabilities --download-offline-databases <any dir>`.
 3. Copy the cache directory to the scanning host and point
@@ -188,7 +190,9 @@ monitor) report their lookups as failed.
 
 For CI pipelines, platform worker pods, or air-gapped environments, use the
 toolchain image instead of the install script. It ships every pinned scanner
-on `PATH` with databases pre-populated:
+on `PATH` with databases pre-populated. osv-scanner is the exception: an
+air-gapped deployment extends the image with osv-scanner and its offline
+database ([Air-gapped OSV scanning](#air-gapped-osv-scanning)):
 
 ```bash
 ./scripts/build-toolchain-image.sh                       # pins come from the manifest
