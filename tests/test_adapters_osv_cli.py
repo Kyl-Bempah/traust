@@ -7,9 +7,16 @@ from types import SimpleNamespace
 from traust.cli.groups import adapters
 
 
-def _args(repo: Path, out: Path, source="api"):
+def _args(repo: Path, out: Path, source="api", sbom=None, grype=None):
     return SimpleNamespace(
-        repo=repo, out=out, timeout=5, source=source, osv_scanner="osv-scanner", no_freeze=False
+        repo=repo,
+        sbom=sbom,
+        grype=grype,
+        out=out,
+        timeout=5,
+        source=source,
+        osv_scanner="osv-scanner",
+        no_freeze=False,
     )
 
 
@@ -182,3 +189,153 @@ def test_air_gapped_with_no_offline_database_is_an_error_not_clean(tmp_path, mon
     assert meta["status"] == "failed"
     assert "no offline version of the OSV database" in meta["failure"]["detail"]
     assert "NOT a clean scan" in capsys.readouterr().err
+
+
+SYFT = {
+    "source": {"name": "example/app"},
+    "artifacts": [
+        {
+            "id": "r1",
+            "type": "rpm",
+            "purl": "pkg:rpm/redhat/python3-urllib3@1.26.5",
+            "locations": [],
+        },
+        {
+            "id": "p1",
+            "type": "python",
+            "purl": "pkg:pypi/urllib3@1.26.5",
+            "locations": [{"path": "/usr/lib/python3.9/site-packages/urllib3"}],
+        },
+        {
+            "id": "p2",
+            "type": "python",
+            "purl": "pkg:pypi/requests@2.19.0",
+            "locations": [{"path": "/opt/app-root/lib/requests"}],
+        },
+    ],
+    "artifactRelationships": [{"parent": "r1", "child": "p1", "type": "ownership-by-file-overlap"}],
+}
+
+
+def _sbom(tmp_path, doc=SYFT):
+    p = tmp_path / "img.syft.json"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    return p
+
+
+def test_sbom_scan_marks_grype_duplicates(tmp_path, monkeypatch, capsys):
+    from traust_engine.adapters import osv_sbom
+
+    def fake_scan(doc, client):
+        packages, stats = osv_sbom.collect_sbom_packages(doc)
+        assert set(packages) == {("PyPI", "requests", "2.19.0")}  # urllib3 is RPM-installed
+        body = {
+            "provenance": {"source": "osv-api", "status": "complete"},
+            "candidates": [
+                {
+                    "osv_id": "GHSA-a",
+                    "aliases": ["CVE-1"],
+                    "ecosystem": "PyPI",
+                    "package": "requests",
+                    "found_version": "2.19.0",
+                },
+                {
+                    "osv_id": "GHSA-b",
+                    "aliases": [],
+                    "ecosystem": "PyPI",
+                    "package": "requests",
+                    "found_version": "2.19.0",
+                },
+            ],
+        }
+        osv_sbom._with_stats(body["provenance"], stats, doc)
+        return body
+
+    _access(monkeypatch, "api")
+    monkeypatch.setattr(osv_sbom, "scan_sbom", fake_scan)
+    grype = tmp_path / "g.json"
+    grype.write_text(
+        json.dumps(
+            {
+                "matches": [
+                    {
+                        "artifact": {"purl": "pkg:pypi/requests@2.19.0"},
+                        "vulnerability": {"id": "CVE-1"},
+                    },
+                    {
+                        "artifact": {"type": "python", "purl": "pkg:pypi/urllib3@1.26.5"},
+                        "vulnerability": {"id": "GHSA-38jv", "severity": "High"},
+                    },
+                ]
+            }
+        )
+    )
+    out = tmp_path / "o.json"
+    assert (
+        adapters.call_osv(None, _args(None, out, source=None, sbom=_sbom(tmp_path), grype=grype))
+        == 0
+    )
+    doc = json.loads(out.read_text())
+    assert doc["metadata"]["sbom"].endswith("img.syft.json")
+    assert doc["metadata"]["skipped_os_installed"] == 1
+    assert doc["metadata"]["grype_dedupe"] == {"also_in_grype": 1, "osv_only": 1}
+    assert [c["also_in_grype"] for c in doc["candidates"]] == [True, False]
+    assert doc["metadata"]["grype_os_installed_matches"] == 1
+    assert doc["grype_os_installed"][0]["package"] == "urllib3"
+    err = capsys.readouterr().err
+    assert "1 candidate(s) not reported by grype" in err
+    assert "OS package installed" in err
+
+
+def test_a_cyclonedx_sbom_is_refused_exit_2(tmp_path, capsys):
+    cdx = tmp_path / "img.cdx.json"
+    cdx.write_text(json.dumps({"bomFormat": "CycloneDX", "components": []}))
+    assert adapters.call_osv(None, _args(None, tmp_path / "o.json", sbom=cdx)) == 2
+    assert "syft JSON" in capsys.readouterr().err
+
+
+def test_air_gapped_sbom_scan_runs_osv_scanner_on_the_filtered_packages(tmp_path, monkeypatch):
+    from traust_engine.adapters import osv_sbom
+
+    _access(monkeypatch, "air-gapped")
+    seen = {}
+
+    def fake_offline(binary, cdx, timeout):
+        seen["purls"] = [c["purl"] for c in json.loads(Path(cdx).read_text())["components"]]
+        return SimpleNamespace(
+            stdout='{"results": []}', stderr="", returncode=0
+        ), "osv-scanner -L x"
+
+    monkeypatch.setattr(osv_sbom, "run_offline", fake_offline)
+    out = tmp_path / "o.json"
+    assert adapters.call_osv(None, _args(None, out, source=None, sbom=_sbom(tmp_path))) == 0
+    assert seen["purls"] == ["pkg:pypi/requests@2.19.0"]  # never the RPM-installed urllib3
+    meta = json.loads(out.read_text())["metadata"]
+    assert meta["source"] == "osv-scanner"
+    assert meta["skipped_os_installed"] == 1
+
+
+def test_air_gapped_sbom_scan_without_a_database_fails(tmp_path, monkeypatch):
+    from traust_engine.adapters import osv_sbom
+
+    _access(monkeypatch, "air-gapped")
+    monkeypatch.setattr(
+        osv_sbom,
+        "run_offline",
+        lambda *a: (
+            SimpleNamespace(
+                stdout='{"results": []}', stderr="unable to fetch OSV database", returncode=127
+            ),
+            "osv-scanner",
+        ),
+    )
+    out = tmp_path / "o.json"
+    assert adapters.call_osv(None, _args(None, out, source=None, sbom=_sbom(tmp_path))) == 2
+    assert json.loads(out.read_text())["metadata"]["status"] == "failed"
+
+
+def test_grype_without_sbom_is_a_usage_error(tmp_path):
+    assert (
+        adapters.call_osv(None, _args(tmp_path, tmp_path / "o.json", grype=tmp_path / "g.json"))
+        == 2
+    )
