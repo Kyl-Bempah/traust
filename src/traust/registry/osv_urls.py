@@ -20,3 +20,10 @@ def osv_batch_url() -> str:
 def osv_vuln_url(vid: str | None = None) -> str:
     base = _osv_base().replace("/query", "/vulns/{vid}")
     return base.format(vid=vid) if vid else base
+
+
+def osv_access() -> str:
+    """`api` (default) or `air-gapped` — the osv source's `access` in feeds.yaml."""
+    from traust.registry.feeds_config import live_sources
+
+    return live_sources()["osv"].get("access", "api")

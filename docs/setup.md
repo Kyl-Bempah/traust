@@ -117,7 +117,7 @@ Step by step, if you need to install by hand:
 | `gitleaks` | github.com/gitleaks/gitleaks | yes |
 | `syft` | github.com/anchore/syft | yes |
 | `grype` | github.com/anchore/grype | yes |
-| `osv-scanner` | github.com/google/osv-scanner | no (upstream publishes none) |
+| `osv-scanner` | github.com/google/osv-scanner — **only for air-gapped OSV scanning**; the default dependency pre-scan uses the OSV API (see below) | no (upstream publishes none) |
 | `cosign` | github.com/sigstore/cosign | yes |
 | `govulncheck` | `go install golang.org/x/vuln/cmd/govulncheck@<pin>` (needs a Go toolchain) | Go module checksum DB |
 
@@ -132,13 +132,57 @@ Tools with no standalone upstream binary come from a package manager:
 | `pip-audit` | `pipx install pip-audit` |
 | `checkov` | `pipx install checkov==<pin>` — the pin is `PINNED_CHECKOV_VERSION` in `harnessing/3-audit/cloud-config-audit/scripts/run_checkov.py`, which hard-fails on a mismatch |
 
-Vulnerability databases (grype, osv-scanner, govulncheck) are populated by
-`setup`; to refresh them, or to bundle them for an air-gapped host:
+Vulnerability databases (grype, govulncheck) are populated by `setup`; to
+refresh them, or to bundle them for an air-gapped host:
 
 ```bash
 python3 -m traust.cli admin toolchain fetch-dbs --profile secure-container-audit
 python3 -m traust.cli admin toolchain fetch-dbs --profile secure-container-audit --offline-bundle dbs.tar.gz
 ```
+
+### OSV: the API by default, osv-scanner when air-gapped
+
+The dependency pre-scan (`traust adapters osv`) reads the checkout's
+lockfiles and manifests and queries the **OSV API**. That is the default
+and needs nothing installed or kept current. The setting is `access` on the
+`osv` source in `$TRAUST_CONFIG_HOME/feeds.yaml`:
+
+```yaml
+sources:
+  osv:
+    url_template: https://api.osv.dev/v1/query
+    access: api          # default; or air-gapped
+```
+
+If the API cannot be used at all, the scan fails fast: `status: failed`,
+an `ERROR:` line, exit 2, and no dependency results. A scan where only some
+lookups failed is `degraded` (exit 3). Neither is ever "no advisories".
+
+#### Air-gapped OSV scanning
+
+For deployments with no route to the OSV API, set `access: air-gapped`.
+The pre-scan then runs **osv-scanner offline** (`--offline`) against a local
+OSV database. **You provide both the binary and the database**: the harness
+does not install them, and continuous operations do not keep them current.
+
+1. Install osv-scanner (pin from `config/external-tools.yaml`) on the
+   scanning host.
+2. On a connected host, download the database:
+   `osv-scanner scan source --offline-vulnerabilities --download-offline-databases <any dir>`.
+3. Copy the cache directory to the scanning host and point
+   `OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY` at it. Repeat the copy to refresh:
+   results are only as current as your last copy.
+
+A missing binary or database is `status: failed`, exit 2 (osv-scanner
+itself exits 127 with an empty, clean-looking result in that case; the
+adapter reads that as a failure). Coverage differs from the API: offline
+osv-scanner reports no Go standard-library advisories (measured on etcd,
+2026-10-20: 73 of the API's 122 candidates, the gap all `stdlib` but 3), so
+run govulncheck, which carries its own database, for Go. The other OSV
+consumers query the API and do not run air-gapped: the fleet sweep
+(`dependency-watch`) writes a `failed` worklist and exits 2, and advisory
+fetches (`fetch_advisory.py`, `resolve-advisory-symbols`, the CVE-replay
+monitor) report their lookups as failed.
 
 ### Container image (CI, platform worker, air gap)
 

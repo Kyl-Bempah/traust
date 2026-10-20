@@ -868,8 +868,10 @@ Use the output as follows:
 
 When a local checkout exists, generate multi-ecosystem dependency-CVE
 candidates before the supply-chain review. The adapter reads the checkout's
-lockfiles and manifests and looks every package up through the OSV API;
-no scanner binary is involved:
+lockfiles and manifests and looks every package up through the OSV API
+(the default). A deployment configured `access: air-gapped` on the `osv`
+source in `feeds.yaml` runs osv-scanner offline instead; the command and
+the contract are the same:
 
 ```bash
 python3 -m traust.cli adapters osv --repo <local-path> --out /tmp/<repo>-osv.json
@@ -898,8 +900,11 @@ Contract (identical in spirit to the govulncheck stage):
    `"osv": "degraded: <counts>"` in `deterministic_steps` and a
    `metadata.additional.coverage_gaps` entry
    (`{"tool": "osv", "system": "dependencies", "reason": ...}`). The
-   unanswered packages are **not** clean. Exit 1 (no lookups at all) is
-   `"osv": "skipped: <reason>"` plus the same coverage gap.
+   unanswered packages are **not** clean. Exit 2 and `status: failed`
+   (an `ERROR:` line; `metadata.failure` says why: the API unreachable,
+   or osv-scanner or its database missing when air-gapped) mean **no
+   lookups at all**: record `"osv": "failed: <failure.status>"` plus the
+   same coverage gap, and make no dependency conclusion.
 4. **`transitive_coverage: partial`** means some manifests have no
    lockfile (`unresolved_manifests`): their direct declarations were looked
    up at the declared floor, but their transitive dependencies were not

@@ -311,8 +311,17 @@ GITLEAKS = OpSpec(
 
 
 # ---------------------------------------------------------------------------
-# osv — dependency advisories from the OSV API (no scanner binary)
+# osv — dependency advisories from the OSV API, or osv-scanner when air-gapped
 # ---------------------------------------------------------------------------
+
+AIR_GAPPED_HELP = (
+    "air-gapped OSV scanning needs osv-scanner and an offline OSV database, both "
+    "provided by you (the harness installs neither) — see docs/setup.md "
+    '"Air-gapped OSV scanning"'
+)
+
+
+OSV_SCANNER_OK_EXITS = (0, 1, 128)
 
 
 def add_osv_args(ap) -> None:
@@ -322,9 +331,10 @@ def add_osv_args(ap) -> None:
     ap.add_argument(
         "--source",
         choices=("api", "osv-scanner"),
-        default="api",
-        help="api (default): the engine's manifest parsers plus the OSV API. "
-        "osv-scanner: the legacy binary, kept only for the parity check before it is removed",
+        default=None,
+        help="Default: the `access` setting of the osv source in feeds.yaml — api "
+        "(default: the engine's manifest parsers plus the OSV API) or air-gapped "
+        "(osv-scanner offline against an adopter-provided database)",
     )
     ap.add_argument("--osv-scanner", default="osv-scanner", help=argparse.SUPPRESS)
     ap.add_argument("--no-freeze", action="store_true", help=argparse.SUPPRESS)
@@ -341,6 +351,16 @@ def _osv_binary_doc(args, repo: Path):
             f"osv-scanner produced no JSON (exit {proc.returncode}):\n"
             f"{(proc.stderr or proc.stdout).strip()[:2000]}"
         )
+    # osv-scanner exits 0 (no vulnerabilities), 1 (vulnerabilities found) or
+    # 128 (no packages). Anything else is an error even when it prints JSON:
+    # a missing offline database exits 127 with an empty, clean-looking
+    # result (measured 2026-10-20, osv-scanner 2.7.0).
+    if proc.returncode not in OSV_SCANNER_OK_EXITS:
+        errors = [ln for ln in (proc.stderr or "").splitlines() if "rror" in ln or "unable" in ln]
+        raise RuntimeError(
+            f"osv-scanner failed (exit {proc.returncode}): "
+            + ("; ".join(errors[:3]) or (proc.stderr or "").strip()[-500:])
+        )
     scan_doc = json.loads(proc.stdout)
     return {
         "provenance": {
@@ -355,24 +375,39 @@ def _osv_binary_doc(args, repo: Path):
     }
 
 
+def _failed_binary_doc(detail: str) -> dict:
+    return {
+        "provenance": {
+            "source": "osv-scanner",
+            "status": "failed",
+            "failure": {"status": "error", "detail": detail},
+        },
+        "candidates": [],
+    }
+
+
 def call_osv(_engine, args) -> int:
     from traust_engine.adapters import osv as osv_mod
     from traust_engine.osv import OsvClient
 
-    from traust.registry.osv_urls import osv_query_url
+    from traust.registry.osv_urls import osv_access, osv_query_url
 
     repo = args.repo.resolve()
     if not repo.is_dir():
         print(f"not a directory: {repo}", file=sys.stderr)
         return 2
-    try:
-        if args.source == "osv-scanner":
+    source = args.source or ("osv-scanner" if osv_access() == "air-gapped" else "api")
+    if source == "osv-scanner":
+        try:
             body = _osv_binary_doc(args, repo)
-        else:
-            body = osv_mod.scan_api(repo, OsvClient(osv_query_url(), timeout=args.timeout))
-    except (FileNotFoundError, subprocess.TimeoutExpired, RuntimeError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+        except FileNotFoundError:
+            body = _failed_binary_doc(
+                f"osv-scanner not found ({args.osv_scanner}): {AIR_GAPPED_HELP}"
+            )
+        except (subprocess.TimeoutExpired, RuntimeError) as e:
+            body = _failed_binary_doc(f"{e} — {AIR_GAPPED_HELP}")
+    else:
+        body = osv_mod.scan_api(repo, OsvClient(osv_query_url(), timeout=args.timeout))
     prov = body["provenance"]
     doc = {
         "metadata": {
@@ -385,6 +420,16 @@ def call_osv(_engine, args) -> int:
     }
     out = args.out or Path.cwd() / f"{repo.name}-osv.json"
     out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    if prov.get("status") == "failed":
+        failure = prov.get("failure") or {}
+        where = f" at {prov['base_url']}" if prov.get("base_url") else ""
+        print(
+            f"ERROR: OSV lookup failed{where} ({failure.get('status', 'error')}): "
+            f"{failure.get('detail') or 'no package was answered'} — no dependency results; "
+            f"this is NOT a clean scan (record a coverage gap) → {out}",
+            file=sys.stderr,
+        )
+        return 2
     print(f"osv: {len(body['candidates'])} candidate(s) → {out}")
     if prov.get("transitive_coverage") == "partial":
         print(
@@ -408,7 +453,7 @@ def call_osv(_engine, args) -> int:
 OSV = OpSpec(
     add_args=add_osv_args,
     call=call_osv,
-    help="Dependency advisories from the OSV API (multi-ecosystem candidates)",
+    help="Dependency advisories from the OSV API, or osv-scanner offline when air-gapped",
 )
 
 

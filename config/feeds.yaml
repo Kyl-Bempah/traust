@@ -26,9 +26,11 @@
 #     `probe`.
 #
 # NOT HERE, deliberately:
-#   - Tool-managed vulnerability DBs (grype, govulncheck, osv-scanner):
-#     the tools own their refresh; watched by `external-tools:*` for the
-#     binary and `grype-db` for grype's DB content age.
+#   - Tool-managed vulnerability DBs (grype, govulncheck): the tools own
+#     their refresh; watched by `external-tools:*` for the binary and
+#     `grype-db` for grype's DB content age. OSV is queried through its API
+#     (the `osv` source below); an air-gapped deployment's offline OSV
+#     database is the adopter's (see `access` on that source).
 #   - MITRE ATT&CK: vendored + sha256-pinned under
 #     harnessing/attack-coverage/tables/, advanced by a reviewed commit.
 #   - Non-security reference registries: `product-definitions` (the Red
@@ -164,6 +166,29 @@ sources:
       package query returns GHSA-prefixed ids).
     url_template: https://api.osv.dev/v1/query
     method: POST
+    # HOW THE DEPENDENCY PRE-SCAN REACHES OSV — `api` (default) or `air-gapped`.
+    #
+    #   api         The engine reads the checkout's lockfiles and manifests and
+    #               queries the OSV API at url_template. Nothing to install or
+    #               keep current. If the API cannot be used at all, the scan
+    #               fails fast: `status: failed`, exit 2, no dependency results
+    #               (never "no advisories").
+    #
+    #   air-gapped  For deployments with no route to the OSV API. The pre-scan
+    #               (`traust adapters osv`) runs osv-scanner offline against a
+    #               local OSV database instead. The ADOPTER provides both: the
+    #               harness does not install osv-scanner or its database, and
+    #               does not keep them current. Download the database on a
+    #               connected host (`osv-scanner scan source
+    #               --download-offline-databases --offline-vulnerabilities
+    #               <any dir>`), copy the cache directory across, and set
+    #               OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY to it on the scanning
+    #               host. The database is only as current as your last copy.
+    #               Missing binary or database = `status: failed`, exit 2.
+    #               The other OSV consumers listed below query the API and are
+    #               unavailable in this mode; they report the lookup as failed.
+    #               See docs/setup.md "Air-gapped OSV scanning".
+    access: api
     ident: package
     probe:
       ident: lodash

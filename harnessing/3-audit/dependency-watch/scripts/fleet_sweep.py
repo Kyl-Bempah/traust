@@ -37,8 +37,14 @@ fails, is rate-limited or is only partly paged is counted in the artifact
 (`lookup_issues`, `pairs_unanswered`, `advisory_details_missing`) and the
 sweep is `degraded`. Unanswered pairs are never read as "no advisories".
 
+When OSV cannot be used at all (one probe lookup fails before the sweep,
+no pair is answered, or the osv source's `access` is `air-gapped`, which
+leaves no API to sweep against) the sweep is `failed`: the artifact is
+written with a `failure` block and no worklist.
+
 Exit 0 on a complete sweep; 3 when the sweep completed but is degraded
-(the artifact is written, with status `degraded`); 2 on usage errors.
+(the artifact is written, with status `degraded`); 2 when it failed or on
+usage errors.
 """
 
 from __future__ import annotations
@@ -55,7 +61,7 @@ from pathlib import Path
 from traust_engine.osv import BatchOutcome, OsvClient, Query
 
 from traust.context import add_config_home_arg, resolve_results_root
-from traust.registry.osv_urls import osv_query_url
+from traust.registry.osv_urls import osv_access, osv_query_url
 
 BATCH_SIZE = 800
 SEV_RANK = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "UNKNOWN": 0}
@@ -629,6 +635,30 @@ def verify_worklist(worklist: list[dict], hits: dict, verify=None) -> tuple[list
     return kept, refuted
 
 
+def _write_failed(out, graph_db, selected, per_eco_counts, total_pairs, status, detail) -> int:
+    """A sweep that could not use OSV: no worklist, never "no advisories". Exit 2."""
+    doc = {
+        "artifact": "fleet-osv-worklist",
+        "generated_at": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "graph_db": str(graph_db),
+        "ecosystems": selected,
+        "pairs_by_ecosystem": per_eco_counts,
+        "pairs_queried": total_pairs,
+        "status": "failed",
+        "failure": {"status": status, "detail": detail},
+        "pairs_unanswered": total_pairs,
+        "worklist": [],
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    print(
+        f"ERROR: OSV sweep failed ({status}): {detail} — no advisories were checked; "
+        f"this is NOT a clean sweep → {out}",
+        file=sys.stderr,
+    )
+    return 2
+
+
 def main(argv=None, post=None, client=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     add_config_home_arg(ap)
@@ -707,13 +737,40 @@ def main(argv=None, post=None, client=None) -> int:
         f"{len(selected)} ecosystem(s): " + " ".join(f"{e}:{n}" for e, n in per_eco_counts.items()),
         file=sys.stderr,
     )
+    failure = None
+    if client is None and post is None and osv_access() == "air-gapped":
+        failure = (
+            "air-gapped",
+            "the osv source's access is air-gapped: the fleet sweep queries the OSV API "
+            "and does not run in that mode",
+        )
+    if failure:
+        return _write_failed(out, graph_db, selected, per_eco_counts, total_pairs, *failure)
     if client is None:
         client = _PostClient(post) if post is not None else _default_client(args.jobs)
+    probe = getattr(client, "probe", None)
+    first = next((e for e in selected if pairs_by_eco[e]), None)
+    if failure is None and probe is not None and first is not None:
+        canonical = OSV_ECOSYSTEM.get(first, first)
+        q = _build_batch_body([next(iter(pairs_by_eco[first]))], canonical)["queries"][0]
+        failure = probe(Query(canonical, q["package"]["name"], q["version"]))
+    if failure:
+        return _write_failed(out, graph_db, selected, per_eco_counts, total_pairs, *failure)
     lookup_issues: Counter = Counter()
     unanswered: list = []
     hits = query_osv_multi(
         pairs_by_eco, args.jobs, client=client, issues=lookup_issues, unanswered=unanswered
     )
+    if total_pairs and len(unanswered) == total_pairs:
+        return _write_failed(
+            out,
+            graph_db,
+            selected,
+            per_eco_counts,
+            total_pairs,
+            ",".join(sorted(lookup_issues)) or "error",
+            "no (name, version) pair was answered",
+        )
     print(f"[+] {len(hits)} vulnerability records hit the fleet", file=sys.stderr)
 
     details, detail_issues = client.get_vulns(list(hits))

@@ -91,7 +91,10 @@ executive summaries, SCI) already read.
    `status: degraded` means some (name, version) pairs were never
    answered (`pairs_unanswered`, listed in `unanswered_pairs`) or some
    advisory details are missing. Report the counts; the unanswered pairs
-   are re-run, never read as "no advisories".
+   are re-run, never read as "no advisories". Exit 2 with
+   `status: failed` means OSV could not be used at all (`failure` says
+   why, including `air-gapped`: the sweep needs the OSV API): nothing was
+   checked, the worklist is empty, and the day is reported as not swept.
 
    **Auto-verify malicious hits (`--verify`, opt-in).** OSV flags a
    malicious package purely by name+version match, which is blind to npm
