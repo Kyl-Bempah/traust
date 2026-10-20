@@ -29,7 +29,8 @@ allowed-tools:
   # subcommand grants can't match them until the command shapes are
   # reworked (P1-W4 residual, sandbox-adoption plan)
   - Bash(gitleaks:*)
-  - Bash(osv-scanner:*)
+  - Bash(syft:*)
+  - Bash(grype:*)
   - Bash(tokei:*)
   - Bash(cloc:*)
   - Bash(scc:*)
@@ -43,7 +44,7 @@ allowed-tools:
   - Bash(python3 *-m traust.cli adapters opengrep:*)
   - Bash(python3 *-m traust_engine.adapters.checkov:*)
   - Bash(python3 *-m traust_engine.adapters.gitleaks:*)
-  - Bash(python3 *-m traust_engine.adapters.osv:*)
+  - Bash(python3 *-m traust.cli adapters osv:*)
   - Bash(python3 *harnessing/3-audit/secure-code-audit/scripts/run_fork_advisory_lag.py:*)
   - Bash(python3 *harnessing/3-audit/secure-code-audit/scripts/expand_config_matrix.py:*)
   - Bash(python *harnessing/3-audit/secure-code-audit/scripts/expand_config_matrix.py:*)
@@ -272,7 +273,7 @@ default for every repository**, not just high-value targets.
    and the other flagged is a finding, not a negative.
 
 Deterministic pre-scans (opengrep, checkov catalog, syft/grype,
-osv-scanner, fork-advisory-lag, gitleaks) run **once** — their facts
+osv, fork-advisory-lag, gitleaks) run **once** — their facts
 seed both passes.
 Single-pass execution remains acceptable only when the invoker
 explicitly requests it (record `"audit_passes": 1` in
@@ -842,7 +843,7 @@ gate applies to this pass too).
 
 ### SBOM & Dependency Scan (syft + grype)
 
-When a local checkout exists **and** `syft` and `grype` are on `PATH`, generate the dependency inventory deterministically instead of eyeballing lock files. If either tool is missing or the analysis was done entirely via the GitHub MCP tools, skip the step — fall back to the manual `go.sum`/lockfile review (this step supplements it, never replaces the rest of this skill) — and record `"sbom-grype": "skipped: <reason>"` in `metadata.additional.deterministic_steps`; record `"ran"` when it executes.
+When a local checkout exists **and** `syft` and `grype` are on `PATH`, generate the dependency inventory deterministically instead of eyeballing lock files. If either tool is missing or the analysis was done entirely via the GitHub MCP tools, skip the step and record `"sbom-grype": "skipped: <reason>"` in `metadata.additional.deterministic_steps`; record `"ran"` when it executes. **A skipped step is a coverage gap, never a clean result** (see *No data, no dependency conclusion* below).
 
 ```bash
 # 1. SBOM from the checkout (excludes mirror the LoC exclusions)
@@ -863,13 +864,17 @@ Use the output as follows:
 - **Findings** — promote a grype match to a finding **only** when the vulnerable code is plausibly reachable from this repository's usage (check the import/call actually exists — a match in an unused transitive module is `dependency_audit`-only), and only after the promotion passes the **Precision Gate → Dependency and advisory gate** (artifact reachability, vendor applicability, manifest-only lint). Categorize as `supply-chain`, cite OWASP K07 for operator repos, and keep `validation_status: not_verified` — a version match is not execution evidence. When a portfolio impact artifact covers the CVE (`analysis-results/impact/<cve>-impact-analysis.json`, from `/impact-analysis`), cite this repo's classification and evidence block: `affected` (symbol-reachable) strengthens promotion, `not_observed` at symbol level is documented dismissal evidence, and manifest-level classifications are context only — record the artifact path in the finding's `evidence`.
 - **`metadata.tools`** — append `syft <version>` and `grype <version> (db <built-date>)` so the scan is reproducible against a stated DB state. The SBOM and grype JSON are intermediates; do not place them in `findings/`.
 
-#### Deterministic dependency pre-scan (osv-scanner)
+#### Deterministic dependency pre-scan (OSV API)
 
-When a local checkout exists **and** `osv-scanner` is on `PATH`, generate
-multi-ecosystem dependency-CVE candidates before the supply-chain review:
+When a local checkout exists, generate multi-ecosystem dependency-CVE
+candidates before the supply-chain review. The adapter reads the checkout's
+lockfiles and manifests and looks every package up through the OSV API
+(the default). A deployment configured `access: air-gapped` on the `osv`
+source in `feeds.yaml` runs osv-scanner offline instead; the command and
+the contract are the same:
 
 ```bash
-python3 -m traust.cli adapters osv --repo <local-path> --out /tmp/<repo>-osv-scanner.json
+python3 -m traust.cli adapters osv --repo <local-path> --out /tmp/<repo>-osv.json
 ```
 
 Contract (identical in spirit to the govulncheck stage):
@@ -878,7 +883,9 @@ Contract (identical in spirit to the govulncheck stage):
    reachability signal exists at this stage. A declared vulnerable
    dependency is context to weigh (unused? dev-only? vulnerable path
    unexercised?), never an automatic finding. For Go modules, prefer the
-   govulncheck stage's reachability classes where both ran.
+   govulncheck stage's reachability classes where both ran. A candidate
+   with `version_basis: manifest-floor` came from a declared range, not a
+   locked version: the installed version may be newer.
 2. Cite candidate advisories (OSV id, package, found/fixed versions,
    lockfile source) as evidence in dependency findings you *do* confirm;
    record the run in `metadata.additional.deterministic_steps` and its
@@ -887,11 +894,41 @@ Contract (identical in spirit to the govulncheck stage):
    <artifact>` joins EPSS scores and CISA-KEV membership onto every
    CVE-bearing candidate (an enrichment tagger — routes attention, never
    changes a severity).
-3. **If osv-scanner is missing, do not stall and do not improvise**:
-   record `"osv-scanner": "skipped: <reason>"` in
-   `metadata.additional.deterministic_steps` and perform the manual
-   dependency review — the pre-scan is an accelerator, never a
-   precondition.
+3. **Read `metadata.status`.** Exit 3 and `status: degraded` mean some
+   lookups were never answered (`lookup_issues`, `packages_unanswered`) or
+   some manifests didn't parse (`manifests_unparsed`). Record
+   `"osv": "degraded: <counts>"` in `deterministic_steps` and a
+   `metadata.additional.coverage_gaps` entry
+   (`{"tool": "osv", "system": "dependencies", "reason": ...}`). The
+   unanswered packages are **not** clean. Exit 2 and `status: failed`
+   (an `ERROR:` line; `metadata.failure` says why: the API unreachable,
+   or osv-scanner or its database missing when air-gapped) mean **no
+   lookups at all**: record `"osv": "failed: <failure.status>"` plus the
+   same coverage gap, and make no dependency conclusion.
+4. **`transitive_coverage: partial`** means some manifests have no
+   lockfile (`unresolved_manifests`): their direct declarations were looked
+   up at the declared floor, but their transitive dependencies were not
+   resolved. Record a `coverage_gaps` entry naming those files ("transitive
+   dependencies not assessed: no lockfile"). Never read their transitive
+   dependencies as clean.
+5. **`severity_basis`** says where `max_severity` came from: `cvss-v3`,
+   `alias-cvss-v3`, `declared`, `alias-declared`, `malicious-package`
+   (always critical) or `unscored`. An `unscored` advisory is banded medium
+   by the harness rule; name that uncertainty when you cite it.
+
+#### No data, no dependency conclusion
+
+Vulnerability claims about dependencies come only from tool or feed data:
+an advisory ID with its source and the scan or database date. When grype,
+the OSV lookup or govulncheck is skipped, degraded or ran against a stale
+database:
+
+- record the coverage gap as above, and make **no dependency conclusion
+  either way**: no `dependency_audit` entry claiming a package is clean or
+  vulnerable, and no "no vulnerable dependencies" negative result;
+- a manual review may **enumerate** packages and versions from lockfiles
+  (facts), but never judge whether they are vulnerable from memory: no CVE
+  ids, affected ranges or fixed versions that a tool or feed didn't supply.
 
 #### Deterministic fork advisory-lag pre-scan (run_fork_advisory_lag.py)
 
@@ -1204,7 +1241,7 @@ unreadable downstream — it could equally mean the lane never executed.
 Include any findings that already exist in the repository from automated scanning tools such as: **Dependabot**, **govulncheck**, **Snyk**, **Trivy**, **Grype**, **Coverity**, and **Renovate**. Check for:
 
 - `.github/dependabot.yml` and Dependabot PRs/alerts
-- `go.sum` / `go.mod` for known vulnerable dependencies
+- `go.sum` / `go.mod`: covered by the govulncheck and OSV pre-scans; cite their advisories, never ones recalled from memory
 - `.snyk`, `.trivyignore`, or similar policy files
 - CI pipeline configurations that run security scanners
 - Any `SECURITY.md` or vulnerability disclosure policy
@@ -1573,7 +1610,7 @@ Rules for batch prompts:
 `/add-inputs` (§Input); `<repo>-threat-model.md` from `/threat-model`
 (coverage diff, findings-tree copy); the FP-precedent cache from
 python3 -m traust.cli corpus precedent; deterministic pre-scan outputs
-(opengrep, gitleaks, osv-scanner, syft/grype, k8s-hardening) recorded
+(opengrep, gitleaks, osv, syft/grype, k8s-hardening) recorded
 under `deterministic_steps`.
 
 **Emits:** `<repo>-security-audit.json` — the campaign's baseline

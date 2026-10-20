@@ -256,7 +256,7 @@ hand-parse these:
   `version: "2.x"` + a `runs` array. Covers ANY producer: CodeQL,
   Semgrep, Snyk, Trivy, Bandit, Coverity 2023+, and the harness's own
   deterministic tools run standalone with SARIF output (opengrep
-  `--sarif`, gitleaks `-f sarif`, osv-scanner `--format sarif`,
+  `--sarif`, gitleaks `-f sarif`,
   checkov `-o sarif`, grype `-o sarif`, govulncheck `-format sarif`),
   plus the harness's own `export_sarif.py` artifacts.
 - **Dependabot alerts** — a JSON array of alert objects carrying
@@ -285,7 +285,7 @@ the generic rules below:
 |---|---|
 | opengrep (`run_opengrep.py`) | audit-flow native JSON via the audit report; standalone `--sarif` → normalizer |
 | gitleaks (`run_gitleaks.py`) | audit-flow native; standalone `-f sarif` → normalizer, or native JSON array → generic rules |
-| osv-scanner (`run_osv_scanner.py`) | audit-flow native; standalone `--format sarif` → normalizer |
+| osv (`traust adapters osv`, OSV API) | audit-flow native candidates JSON via the audit report; an external osv-scanner `--format sarif` file → normalizer |
 | govulncheck (`run_govulncheck.py`) | wrapper's reduced JSON → generic rules; native `-json` stream or `-format sarif` → normalizer |
 | checkov (`run_checkov.py`) | /cloud-config-audit report (own schema); standalone `-o sarif` → normalizer |
 | grype | /secure-container-audit report; standalone `-o sarif` → normalizer |

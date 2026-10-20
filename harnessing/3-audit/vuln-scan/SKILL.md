@@ -279,8 +279,11 @@ as `"ran"`/`"skipped: <reason>"` in
 - `scan_k8s_hardening.py <target-dir>` — only when Kubernetes YAML is
   among the changed files; use only the `KHS-*` facts citing changed
   manifests.
-- `run_osv_scanner.py --repo <target-dir>` — only when the scope
-  package says `deps_manifests_changed: true`.
+- `python3 -m traust.cli adapters osv --repo <target-dir>` (OSV API) —
+  only when the scope package says `deps_manifests_changed: true`.
+  `status: degraded` (exit 3) is recorded as
+  `"osv": "degraded: <counts>"`, `status: failed` (exit 2) as
+  `"osv": "failed: <failure.status>"`; neither is ever clean.
 
 ### Dedupe against the baseline
 

@@ -2,6 +2,55 @@
 
 All notable changes to Traust are documented here.
 
+## [0.31.0]
+
+- **OSV through the API; osv-scanner is no longer needed for dependency
+  scans** (owner decision 2026-10-20, agreed with Shaun). Pins traust-engine
+  0.33.0, whose `osv` adapter reads lockfiles and manifests and queries the
+  OSV API through one shared client.
+  - **`traust adapters osv`** uses the API by default. Output is
+    `<repo>-osv.json`, artifact `osv-dependency-candidates`, with lookup
+    provenance in `metadata`.
+    - Exit 3 when the scan is `degraded`, meaning some lookups went
+      unanswered or some manifests didn't parse.
+    - **Exit 2 and `status: failed`** when OSV can't be used at all: one
+      probe lookup fails before the scan (no retrying every batch), or no
+      package is answered. An `ERROR:` line names the endpoint and the
+      reason; the artifact is still written, with a `failure` block and no
+      candidates.
+    - A note when `transitive_coverage` is `partial` (manifests with no
+      lockfile, or a pinned requirements file that wasn't compiled).
+- **Air-gapped OSV scanning is a configuration option; the API is the
+  default.** New `access` setting on the `osv` source in `feeds.yaml`:
+  `api` (default) or `air-gapped`. Air-gapped, `traust adapters osv` runs
+  osv-scanner offline against a local OSV database. The adopter provides
+  the binary and the database; the harness installs neither and does not
+  keep them current. A missing binary or database is `failed`, exit 2. The
+  fleet sweep needs the API and writes a `failed` worklist (exit 2) in that
+  mode. Documented in `config/feeds.yaml`, `docs/setup.md` ("Air-gapped OSV
+  scanning"), `docs/external-dependencies.md`, `docs/requirements.md`,
+  `docs/getting-started.md` and `config/README.md`. `--source` overrides
+  the setting for one run.
+  - **`fleet_sweep`** runs on the shared client. Before, three failed calls
+    became "no vulnerabilities", page tokens were ignored, and failed detail
+    fetches were dropped. Unanswered pairs are now counted and listed
+    (`pairs_unanswered`, `unanswered_pairs`), and a degraded sweep exits 3.
+    A sweep where OSV can't be used at all (failed probe, nothing
+    answered, or `access: air-gapped`) is `failed` and exits 2.
+  - **`resolve-advisory-symbols`** runs on the shared client. A failed alias
+    fetch no longer turns into a false "no fix commit".
+- **No inference in place of data** (scanner-currency workstream 10, shipped
+  ahead per redesign D8).
+  - `/secure-code-audit`'s dependency review: a skipped or degraded scanner
+    is a coverage gap and no dependency conclusion either way. A manual
+    review enumerates packages but never names CVEs from memory.
+  - `/impact-analysis`: vulnerable ranges and fixed versions come from a
+    fetched advisory, never from recall.
+  - `/secure-container-audit`, `/secure-rpm-audit`, `/dependency-watch`
+    and `/vuln-scan` carry the same rules.
+  - The skills' tool permissions now match the commands they run, including
+    `syft` and `grype` for `/secure-code-audit`.
+
 ## [0.30.0]
 
 - **Nothing reads `progress-tracker/configs/` any more** (owner decision,

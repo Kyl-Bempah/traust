@@ -8,10 +8,9 @@ metadata:
   harness.tier: "primary"
 allowed-tools:
   # Scoped per A11 — exactly the chain's scripts, never a bare interpreter.
-  - Bash(python3 *-m traust.cli.fetch_feeds:*)
-  - Bash(python3 *-m traust_engine.adapters.osv:*)
+  - Bash(python3 *-m traust.cli feeds fetch:*)
   - Bash(python3 *-m traust.cli impact analyze:*)
-  - Bash(python3 *-m traust.cli.route_impact_findings:*)
+  - Bash(python3 *-m traust.cli route impact-findings:*)
   - Bash(python3 *harnessing/3-audit/dependency-watch/scripts/fleet_sweep.py:*)
   - Read
   - Glob
@@ -45,9 +44,11 @@ executive summaries, SCI) already read.
 ## Procedure
 
 1. **Refresh feeds** (deterministic):
-   `python3 -m traust.cli feeds fetch` — OSV / Go
-   vulndb / EPSS / CISA KEV pull-through caches. `/drift-watch` flags
-   stale caches independently.
+   `python3 -m traust.cli feeds fetch` — the cached feeds (EPSS, CISA KEV,
+   vendor CVE and VEX data). OSV is not cached: it is queried live
+   through the shared OSV client. A feed the fetch reports `STALE` is
+   named in the run's report; `/drift-watch` flags stale caches
+   independently.
 
 2. **Determine the advisory set.** With a `CVE-ID` argument, that CVE
    only. Otherwise: advisories newly published/modified since the last
@@ -85,6 +86,15 @@ executive summaries, SCI) already read.
    listed under `rejected_inputs` — review them, never hand-repair
    them into commands (assessment 2026-07-31 H1). Commit the sweep
    artifact.
+
+   **A degraded sweep is not a quiet day.** Exit 3 with
+   `status: degraded` means some (name, version) pairs were never
+   answered (`pairs_unanswered`, listed in `unanswered_pairs`) or some
+   advisory details are missing. Report the counts; the unanswered pairs
+   are re-run, never read as "no advisories". Exit 2 with
+   `status: failed` means OSV could not be used at all (`failure` says
+   why, including `air-gapped`: the sweep needs the OSV API): nothing was
+   checked, the worklist is empty, and the day is reported as not swept.
 
    **Auto-verify malicious hits (`--verify`, opt-in).** OSV flags a
    malicious package purely by name+version match, which is blind to npm

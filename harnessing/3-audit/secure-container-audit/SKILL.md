@@ -199,7 +199,8 @@ any privileged entrypoint binary), switch to the assertive posture:
 inspect those binaries directly (strings/linked-library/version
 probing, upstream digest comparison against the declared source repo),
 report plausible unpatched-component findings with what-would-confirm
-named, record `metadata.additional.assertive_inference: {"trigger":
+named — "plausible unpatched" rests on a version the probing found plus
+an advisory a tool or feed supplied, never a CVE recalled from memory, record `metadata.additional.assertive_inference: {"trigger":
 "sbom attribution gap", "unattributed_share": "<estimate>"}`, and state
 the gap in `negative_results`. Expected extra false positives are
 absorbed by triage — an unattributed vulnerable binary silently passing

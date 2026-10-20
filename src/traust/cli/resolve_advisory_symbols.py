@@ -64,14 +64,9 @@ import json
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
 
 from traust.paths import HARNESS_ROOT
-from traust.registry.osv_urls import osv_vuln_url
-
-OSV_VULN = osv_vuln_url()
 
 # GitHub, GitLab, and the cgit/gitweb shapes the C ecosystem actually uses.
 # Measured 2026-08-14: of 8 distro CVEs only 2 carried a GitHub commit ref —
@@ -129,15 +124,20 @@ _SRC_EXT = {
 }
 
 
-def _get_json(url: str, timeout: int = 25) -> dict | None:
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as fh:
-            return json.load(fh)
-    except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError):
-        return None
+def _osv_client():
+    from traust_engine.osv import OsvClient
+
+    from traust.registry.osv_urls import osv_query_url
+
+    return OsvClient(osv_query_url(), timeout=25)
 
 
-def osv_records(advisory: str) -> list[dict]:
+def osv_records(advisory: str, client=None) -> list[dict]:
+    """The advisory's records; see osv_records_with_status for failures."""
+    return osv_records_with_status(advisory, client)[0]
+
+
+def osv_records_with_status(advisory: str, client=None) -> tuple[list[dict], dict]:
     """The advisory's record plus ALL of its alias records (deduped).
 
     Alias traversal must run in BOTH directions, not just CVE-ward: the
@@ -148,10 +148,12 @@ def osv_records(advisory: str) -> list[dict]:
     GHSA-24rp-q3w6-vc56 is the reverse. A CVE-only walk silently returns
     `no_fix_commit` for advisories whose fix IS published.
     """
+    client = client or _osv_client()
     out, seen = [], set()
-    first = _get_json(OSV_VULN.format(vid=advisory))
+    found, issues = client.get_vulns([advisory])
+    first = found.get(advisory)
     if not first:
-        return out
+        return out, {"lookup_failed": dict(issues), "alias_lookups_failed": 0}
     out.append(first)
     seen.add(first.get("id"))
     # ALIASES ONLY — an alias is the SAME vulnerability under another id,
@@ -165,14 +167,16 @@ def osv_records(advisory: str) -> list[dict]:
     # 2026-08-14: RHSA-2026:1334 has aliases=None, upstream=['CVE-2026-0861',
     # 'CVE-2026-0915']. Without this hop every distro advisory resolves to
     # nothing, which silently excludes the whole C/C++ surface.
+    aliases = []
     for al in (first.get("aliases") or []) + (first.get("upstream") or []):
-        if not isinstance(al, str) or al in seen:
-            continue
-        seen.add(al)
-        rec = _get_json(OSV_VULN.format(vid=al))
-        if rec:
-            out.append(rec)
-    return out
+        if isinstance(al, str) and al not in seen:
+            seen.add(al)
+            aliases.append(al)
+    alias_found, alias_issues = client.get_vulns(aliases) if aliases else ({}, {})
+    out += [alias_found[al] for al in aliases if al in alias_found]
+    # an alias that could not be fetched may be the one carrying the fix
+    # commit: report it, so "no fix commit" is never claimed on missing data
+    return out, {"lookup_failed": {}, "alias_lookups_failed": sum(dict(alias_issues).values())}
 
 
 def fix_commits(records: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -369,15 +373,34 @@ def main(argv=None) -> int:
             symbols=[{"symbol": s, "source": "curated", "confidence": "high"} for s in curated],
         )
     else:
-        records = osv_records(args.advisory)
+        records, lookup = osv_records_with_status(args.advisory)
         if not records:
-            doc.update(status="error: advisory not found in OSV", symbols=[])
+            failed = lookup["lookup_failed"]
+            doc.update(
+                status=(
+                    "error: OSV lookup failed ("
+                    + ", ".join(f"{k}:{v}" for k, v in sorted(failed.items()))
+                    + ")"
+                    if failed
+                    else "error: advisory not found in OSV"
+                ),
+                symbols=[],
+            )
         else:
             doc["osv_ids"] = [r.get("id") for r in records]
             commits, pulls = fix_commits(records)
             doc["fix_commits"] = commits
             doc["pull_refs"] = pulls
-            if not commits:
+            if lookup["alias_lookups_failed"]:
+                doc["alias_lookups_failed"] = lookup["alias_lookups_failed"]
+            if not commits and lookup["alias_lookups_failed"]:
+                doc.update(
+                    status="degraded: alias lookups failed",
+                    symbols=[],
+                    note=f"{lookup['alias_lookups_failed']} alias record(s) could not be "
+                    "fetched; the fix commit may be on one of them — not a 'no fix commit' result",
+                )
+            elif not commits:
                 doc.update(
                     status="no_fix_commit",
                     symbols=[],

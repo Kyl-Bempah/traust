@@ -104,7 +104,7 @@ of free-reading:
 |---|---|
 | `opengrep` | semantic pre-scan with the harness-authored rule pack |
 | `gitleaks` | secret detection incl. git history |
-| `osv-scanner`, `govulncheck` | known-vulnerability dependency scans |
+| `govulncheck` (OSV is queried through its API; `osv-scanner` only when [air-gapped](setup.md#air-gapped-osv-scanning)) | known-vulnerability dependency scans |
 | `tokei` (or `cloc`/`scc`) | lines-of-code accounting |
 
 Install hints are in [setup.md](setup.md). The Kubernetes manifest
