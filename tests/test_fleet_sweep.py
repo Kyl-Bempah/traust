@@ -664,3 +664,64 @@ def test_verify_worklist_passes_non_malicious_rows_through():
     assert refuted == []
     assert len(kept) == 1
     assert "verification" not in kept[0]
+
+
+# --------------------------------------------------------------------------
+# Shared OSV client: unanswered lookups are counted, never read as clean
+# --------------------------------------------------------------------------
+
+
+class _FailingClient:
+    """Shared-client fake: every lookup fails as unreachable."""
+
+    def query_batch(self, queries):
+        from collections import Counter
+
+        from traust_engine.osv import BatchOutcome
+
+        return BatchOutcome([None] * len(queries), Counter({"unreachable": len(queries)}))
+
+    def get_vulns(self, ids):
+        from collections import Counter
+
+        return {}, Counter()
+
+
+def test_query_osv_multi_counts_unanswered_pairs():
+    from collections import Counter
+
+    issues, unanswered = Counter(), []
+    hits = fs.query_osv_multi(
+        {"npm": {("@scope/x", "1.2.3"): {"repo:b"}}},
+        jobs=1,
+        client=_FailingClient(),
+        issues=issues,
+        unanswered=unanswered,
+    )
+    assert hits == {}
+    assert issues == {"unreachable": 1}
+    assert unanswered == [("npm", "@scope/x", "1.2.3")]
+
+
+def test_a_failed_sweep_is_degraded_not_clean(tmp_path, capsys):
+    db = _seed_db_with_graph_only(tmp_path)
+    out = tmp_path / "wl-degraded.json"
+    rc = fs.main(
+        ["--graph-db", str(db), "--out", str(out), "--ecosystem", "all"], client=_FailingClient()
+    )
+    assert rc == 3
+    doc = json.loads(out.read_text())
+    assert doc["status"] == "degraded"
+    assert doc["pairs_unanswered"] == doc["pairs_queried"] > 0
+    assert doc["lookup_issues"] == {"unreachable": doc["pairs_queried"]}
+    assert doc["unanswered_pairs"]
+    assert "NOT clean" in capsys.readouterr().err
+
+
+def test_a_complete_sweep_says_so(tmp_path):
+    db = _seed_db_with_graph_only(tmp_path)
+    out = tmp_path / "wl-ok.json"
+    assert fs.main(["--graph-db", str(db), "--out", str(out)], post=_RecordingPost()) == 0
+    doc = json.loads(out.read_text())
+    assert doc["status"] == "complete"
+    assert doc["pairs_unanswered"] == 0

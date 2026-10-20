@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import datetime
 import json
 import shutil
@@ -310,73 +311,104 @@ GITLEAKS = OpSpec(
 
 
 # ---------------------------------------------------------------------------
-# osv-scanner
+# osv — dependency advisories from the OSV API (no scanner binary)
 # ---------------------------------------------------------------------------
 
 
 def add_osv_args(ap) -> None:
-    ap.add_argument("--repo", required=True, type=Path, help="Target clone")
-    ap.add_argument("--out", type=Path, help="Output JSON (default: <repo>-osv-scanner.json)")
-    ap.add_argument("--timeout", type=int, default=600)
-    ap.add_argument("--osv-scanner", default="osv-scanner", help="osv-scanner binary")
+    ap.add_argument("--repo", required=True, type=Path, help="Target checkout")
+    ap.add_argument("--out", type=Path, help="Output JSON (default: <repo>-osv.json)")
+    ap.add_argument("--timeout", type=int, default=60, help="Per-request timeout, seconds")
     ap.add_argument(
-        "--no-freeze",
-        action="store_true",
-        help="Allow osv-scanner to refresh its local DB during the scan",
+        "--source",
+        choices=("api", "osv-scanner"),
+        default="api",
+        help="api (default): the engine's manifest parsers plus the OSV API. "
+        "osv-scanner: the legacy binary, kept only for the parity check before it is removed",
     )
+    ap.add_argument("--osv-scanner", default="osv-scanner", help=argparse.SUPPRESS)
+    ap.add_argument("--no-freeze", action="store_true", help=argparse.SUPPRESS)
+
+
+def _osv_binary_doc(args, repo: Path):
+    from traust_engine.adapters import osv as osv_mod
+
+    proc, invocation = osv_mod.run_scanner(
+        args.osv_scanner, repo, max(args.timeout, 600), freeze=not args.no_freeze
+    )
+    if not proc.stdout.strip().startswith("{"):
+        raise RuntimeError(
+            f"osv-scanner produced no JSON (exit {proc.returncode}):\n"
+            f"{(proc.stderr or proc.stdout).strip()[:2000]}"
+        )
+    scan_doc = json.loads(proc.stdout)
+    return {
+        "provenance": {
+            "source": "osv-scanner",
+            "tool_version": (scan_doc.get("experimental_config") or {}).get("version")
+            or osv_mod._tool_version(args.osv_scanner)
+            or "",
+            "invocation": invocation,
+            "status": "complete",
+        },
+        "candidates": osv_mod.parse_output(scan_doc, repo),
+    }
 
 
 def call_osv(_engine, args) -> int:
     from traust_engine.adapters import osv as osv_mod
+    from traust_engine.osv import OsvClient
+
+    from traust.registry.osv_urls import osv_query_url
 
     repo = args.repo.resolve()
     if not repo.is_dir():
         print(f"not a directory: {repo}", file=sys.stderr)
         return 2
     try:
-        proc, invocation = osv_mod.run_scanner(
-            args.osv_scanner,
-            repo,
-            args.timeout,
-            freeze=not args.no_freeze,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        if args.source == "osv-scanner":
+            body = _osv_binary_doc(args, repo)
+        else:
+            body = osv_mod.scan_api(repo, OsvClient(osv_query_url(), timeout=args.timeout))
+    except (FileNotFoundError, subprocess.TimeoutExpired, RuntimeError) as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
-    if not proc.stdout.strip().startswith("{"):
-        print(
-            f"ERROR: osv-scanner produced no JSON (exit {proc.returncode}):\n"
-            f"{(proc.stderr or proc.stdout).strip()[:2000]}",
-            file=sys.stderr,
-        )
-        return 1
-    scan_doc = json.loads(proc.stdout)
-    candidates = osv_mod.parse_output(scan_doc, repo)
-    tool_ver = (
-        (scan_doc.get("experimental_config") or {}).get("version")
-        or osv_mod._tool_version(args.osv_scanner)
-        or ""
-    )
+    prov = body["provenance"]
     doc = {
         "metadata": {
-            "artifact": "osv-scanner-dependency-candidates",
+            "artifact": "osv-dependency-candidates",
             "repository": str(repo),
-            "tool": args.osv_scanner,
-            "tool_version": tool_ver,
-            "invocation": invocation,
+            "harness_version": harness_version(),
+            **prov,
         },
-        "candidates": candidates,
+        "candidates": body["candidates"],
     }
-    out = args.out or Path.cwd() / f"{repo.name}-osv-scanner.json"
+    out = args.out or Path.cwd() / f"{repo.name}-osv.json"
     out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
-    print(f"osv: {len(candidates)} candidate(s) → {out}")
+    print(f"osv: {len(body['candidates'])} candidate(s) → {out}")
+    if prov.get("transitive_coverage") == "partial":
+        print(
+            f"NOTE: {len(prov.get('unresolved_manifests') or [])} manifest(s) have no lockfile: "
+            "their transitive dependencies were not resolved (record a coverage gap)",
+            file=sys.stderr,
+        )
+    if prov.get("status") == "degraded":
+        print(
+            "WARNING: degraded — "
+            f"{prov.get('packages_unanswered', 0)} package(s) unanswered, "
+            f"{prov.get('advisory_details_missing', 0)} advisory detail(s) missing, "
+            f"{len(prov.get('manifests_unparsed') or [])} manifest(s) unparsed: "
+            "unanswered packages are NOT clean (record a coverage gap)",
+            file=sys.stderr,
+        )
+        return 3
     return 0
 
 
 OSV = OpSpec(
     add_args=add_osv_args,
     call=call_osv,
-    help="OSV-scanner multi-ecosystem dependency-CVE candidates",
+    help="Dependency advisories from the OSV API (multi-ecosystem candidates)",
 )
 
 

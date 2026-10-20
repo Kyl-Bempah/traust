@@ -175,6 +175,7 @@ sources:
       - harnessing/3-audit/secure-code-audit/scripts/run_fork_advisory_lag.py
       - traust.cli.resolve_advisory_symbols
       - traust.ops.cve_replay_monitor
+      - traust.cli adapters osv (traust_engine.adapters.osv, the dependency pre-scan)
     license:
       id: pass-through
       terms: >-
