@@ -2,6 +2,20 @@
 
 All notable changes to Traust are documented here.
 
+## [0.34.1]
+
+- **Test and dev dependencies are tagged, never skipped** (owner decision
+  2026-10-21). Pins traust-engine 0.37.0 (9916c9e).
+  - Candidates reachable only through Maven `test` scope, npm
+    `devDependencies`, Cargo `[dev-dependencies]` or Poetry dev groups carry
+    `dependency_scope: test` / `dev`.
+  - `/secure-code-audit` and `/vuln-scan` treat them as build- and
+    test-environment exposure, not shipped code. No tag means runtime or
+    unknown.
+  - On keycloak, 117 of 355 candidates are `test` and 13 are `dev`.
+- This change was meant to ship in 0.34.0 (traust#101). It was pushed a
+  minute after that PR merged, so it lands here.
+
 ## [0.34.0]
 
 - **Manifests without a lockfile are resolved through deps.dev, on by
