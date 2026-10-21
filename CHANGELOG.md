@@ -6,7 +6,7 @@ All notable changes to Traust are documented here.
 
 - **Manifests without a lockfile are resolved through deps.dev, on by
   default** (owner decisions 2026-10-20 option c and 2026-10-21). Pins
-  traust-engine 0.36.0 (21bd608).
+  traust-engine 0.36.0 (683552d, which includes 0.35.1).
   - `traust adapters osv --repo` resolves the transitive tree of every
     `package.json`, `requirements*.txt`, `pom.xml` and `Cargo.toml`
     without a lockfile, and resolves declarations with no version at
