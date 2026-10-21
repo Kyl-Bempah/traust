@@ -75,14 +75,23 @@ cd traust && uv sync
 
 No `uv`? `pip install --require-hashes -r requirements.lock`.
 
-`uv sync` pulls the code dependencies from release tags — `traust-engine`
-(scanner adapters, corpus, metrics, reporting, the gateway to the ledger) and
-`traust-contracts` (schemas, enums, shared models) — and, through
-traust-engine, `traust-ledger` (finding identity, Merkle integrity, signing).
-Clone those only to change them. What each owns, which one to change for a
-given fix, how the pins work and how they fail (`uv lock` "conflicting URLs"):
-[components.md](components.md). `/check-drift` reports an installed package
-that does not match its pin; `uv sync` fixes it.
+`uv sync` installs the code dependencies selected by commit `rev` in
+`pyproject.toml` and resolved in `uv.lock`: `traust-engine` (scanner adapters,
+corpus, metrics, reporting, and the ledger gateway), `traust-ledger` (finding
+identity, Merkle integrity, and signing), and `traust-contracts` (schemas, enums,
+shared bindings, and database DDL). Clone those repositories only to change them.
+
+[traust-core](https://github.com/traust-security/traust-core) is the shared
+platform API being adopted by the ecosystem. It is not yet a declared dependency
+of the harness, engine, or ledger, so this quick start neither installs core nor
+requires a sibling core checkout. Core's `traust.yaml` configuration and planned
+REST API do not replace this harness's `TRAUST_CONFIG_HOME` setup. Core adoption
+requires a separate, tested implementation and dependency migration.
+
+What each component owns, which repo to change, and how source conflicts and
+commit updates work: [components.md](components.md). `/check-drift` reports an
+installed package that does not match its selected dependency; `uv sync`
+restores the manifest/lockfile selection.
 
 ## 4. Scanner toolchain
 
