@@ -75,14 +75,23 @@ cd traust && uv sync
 
 No `uv`? `pip install --require-hashes -r requirements.lock`.
 
-`uv sync` pulls the code dependencies from release tags — `traust-engine`
-(scanner adapters, corpus, metrics, reporting, the gateway to the ledger) and
-`traust-contracts` (schemas, enums, shared models) — and, through
-traust-engine, `traust-ledger` (finding identity, Merkle integrity, signing).
-Clone those only to change them. What each owns, which one to change for a
-given fix, how the pins work and how they fail (`uv lock` "conflicting URLs"):
-[components.md](components.md). `/check-drift` reports an installed package
-that does not match its pin; `uv sync` fixes it.
+`uv sync` installs the code dependencies selected by commit `rev` in
+`pyproject.toml` and resolved in `uv.lock`: `traust-engine` (scanner adapters,
+corpus, metrics, reporting, and the ledger gateway), `traust-ledger` (finding
+identity, Merkle integrity, and signing), and `traust-contracts` (schemas, enums,
+shared bindings, and database DDL). Clone those repositories only to change them.
+
+[traust-core](https://github.com/traust-security/traust-core) is the shared
+platform API being adopted by the ecosystem. It is not yet a declared dependency
+of the harness, engine, or ledger, so this quick start neither installs core nor
+requires a sibling core checkout. Core's `traust.yaml` configuration and planned
+REST API do not replace this harness's `TRAUST_CONFIG_HOME` setup. Core adoption
+requires a separate, tested implementation and dependency migration.
+
+What each component owns, which repo to change, and how source conflicts and
+commit updates work: [components.md](components.md). `/check-drift` reports an
+installed package that does not match its selected dependency; `uv sync`
+restores the manifest/lockfile selection.
 
 ## 4. Scanner toolchain
 
@@ -117,7 +126,7 @@ Step by step, if you need to install by hand:
 | `gitleaks` | github.com/gitleaks/gitleaks | yes |
 | `syft` | github.com/anchore/syft | yes |
 | `grype` | github.com/anchore/grype | yes |
-| `osv-scanner` | github.com/google/osv-scanner | no (upstream publishes none) |
+| `osv-scanner` | github.com/google/osv-scanner — **air-gapped OSV scanning only, and not installed by the script or the image**: you install it at the pin in `config/external-tools.yaml` (see below). The default dependency pre-scan uses the OSV API | no (upstream publishes none) |
 | `cosign` | github.com/sigstore/cosign | yes |
 | `govulncheck` | `go install golang.org/x/vuln/cmd/govulncheck@<pin>` (needs a Go toolchain) | Go module checksum DB |
 
@@ -132,19 +141,103 @@ Tools with no standalone upstream binary come from a package manager:
 | `pip-audit` | `pipx install pip-audit` |
 | `checkov` | `pipx install checkov==<pin>` — the pin is `PINNED_CHECKOV_VERSION` in `harnessing/3-audit/cloud-config-audit/scripts/run_checkov.py`, which hard-fails on a mismatch |
 
-Vulnerability databases (grype, osv-scanner, govulncheck) are populated by
-`setup`; to refresh them, or to bundle them for an air-gapped host:
+Vulnerability databases (grype, govulncheck) are populated by `setup`; to
+refresh them, or to bundle them for an air-gapped host:
 
 ```bash
 python3 -m traust.cli admin toolchain fetch-dbs --profile secure-container-audit
 python3 -m traust.cli admin toolchain fetch-dbs --profile secure-container-audit --offline-bundle dbs.tar.gz
 ```
 
+### OSV: the API by default, osv-scanner when air-gapped
+
+The dependency pre-scan (`traust adapters osv`) reads the checkout's
+lockfiles and manifests and queries the **OSV API**. That is the default
+and needs nothing installed or kept current. The setting is `access` on the
+`osv` source in `$TRAUST_CONFIG_HOME/feeds.yaml`:
+
+```yaml
+sources:
+  osv:
+    url_template: https://api.osv.dev/v1/query
+    access: api          # default; or air-gapped
+```
+
+If the API cannot be used at all, the scan fails fast: `status: failed`,
+an `ERROR:` line, exit 2, and no dependency results. A scan where only some
+lookups failed is `degraded` (exit 3). Neither is ever "no advisories".
+
+#### Manifests without a lockfile: deps.dev resolution
+
+A `package.json`, `requirements*.txt`, `pom.xml` or `Cargo.toml` with no
+lockfile beside it declares only direct dependencies. The pre-scan resolves
+the rest through the **deps.dev API**, which is on by default:
+- each direct dependency's resolved graph is added to the OSV lookup
+  (`version_basis: resolved`, with `resolved_via`);
+- a declaration with no version resolves at deps.dev's default version
+  (`version_basis: resolved-default`).
+
+For PyPI and Maven, a version the project declares itself overrides a
+resolved one. Each dependency is resolved on its own, as of today, so the
+result approximates an install; it isn't a lockfile. Whatever can't be
+resolved stays in `unresolved_manifests` with a reason
+(`transitive_coverage: partial`). npm, PyPI, Maven and Cargo only; Go needs
+none (`go.mod` lists every module).
+
+**Terms and attribution.** Use of the API is subject to the
+[Google APIs Terms of Service](https://developers.google.com/terms), which
+bind the operator who runs it. The resolved graphs are deps.dev-generated
+data licensed CC BY 4.0, and every scan carries the attribution in
+`metadata.resolution.attribution`. Details are in
+[external-dependencies.md](external-dependencies.md).
+
+**Opt out** in `$TRAUST_CONFIG_HOME/feeds.yaml`:
+
+```yaml
+sources:
+  deps_dev:
+    access: disabled   # default: api
+```
+
+Manifests without a lockfile then stay coverage gaps. Resolution isn't
+used air-gapped. A config home whose `feeds.yaml` has no `deps_dev` source
+doesn't resolve either; copy the entry from the shipped `config/feeds.yaml`.
+
+#### Air-gapped OSV scanning
+
+For deployments with no route to the OSV API, set `access: air-gapped`.
+The pre-scan then runs **osv-scanner offline** (`--offline`) against a local
+OSV database. **You provide both the binary and the database**: the harness
+does not install them, and continuous operations do not keep them current.
+
+1. Install osv-scanner on the scanning host (or into your extension of the
+   toolchain image) at the version pinned in `config/external-tools.yaml`:
+   the tested version, kept current by the `external-tools:osv-scanner`
+   drift row. `install-toolchain.sh` and the image do not install it.
+2. On a connected host, download the database:
+   `osv-scanner scan source --offline-vulnerabilities --download-offline-databases <any dir>`.
+3. Copy the cache directory to the scanning host and point
+   `OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY` at it. Repeat the copy to refresh:
+   results are only as current as your last copy.
+
+A missing binary or database is `status: failed`, exit 2 (osv-scanner
+itself exits 127 with an empty, clean-looking result in that case; the
+adapter reads that as a failure). Coverage differs from the API: offline
+osv-scanner reports no Go standard-library advisories (measured on etcd,
+2026-10-20: 73 of the API's 122 candidates, the gap all `stdlib` but 3), so
+run govulncheck, which carries its own database, for Go. The other OSV
+consumers query the API and do not run air-gapped: the fleet sweep
+(`dependency-watch`) writes a `failed` worklist and exits 2, and advisory
+fetches (`fetch_advisory.py`, `resolve-advisory-symbols`, the CVE-replay
+monitor) report their lookups as failed.
+
 ### Container image (CI, platform worker, air gap)
 
 For CI pipelines, platform worker pods, or air-gapped environments, use the
 toolchain image instead of the install script. It ships every pinned scanner
-on `PATH` with databases pre-populated:
+on `PATH` with databases pre-populated. osv-scanner is the exception: an
+air-gapped deployment extends the image with osv-scanner and its offline
+database ([Air-gapped OSV scanning](#air-gapped-osv-scanning)):
 
 ```bash
 ./scripts/build-toolchain-image.sh                       # pins come from the manifest

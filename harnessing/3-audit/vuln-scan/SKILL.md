@@ -112,7 +112,7 @@ it is not part of this harness and must be installed separately.
 **Paths:** `<skill-base>` is this skill's base directory (injected by the
 runtime as "Base directory for this skill"; it is
 `traust/harnessing/3-audit/vuln-scan`). `<harness>` is the
-traust repo root, i.e. `<skill-base>/../..`. Resolve both to
+traust repo root, i.e. `<skill-base>/../../..`. Resolve both to
 absolute paths once at startup. Bash `git` is permitted ONLY for read-only
 provenance queries (`git -C <harness> rev-parse --short HEAD`,
 `git -C <target-dir> rev-parse --short HEAD`,
@@ -165,17 +165,11 @@ flow**; anything not mentioned here (fan-out mechanics, review brief,
 collation, confidence pass, validation gate, hand-back, Constraints) is
 inherited unchanged.
 
-**Fleet dispatch is an operator decision, informed by measured cost**
-(operator clarification 2026-07-27 — the plan's $5 figure was a
-pre-pilot reference target, never a hard gate). Measured base rates:
-the 50-repo pilot ran **$6.67/run** median pre-packet; the
-context-packet re-pilot (Step 0b, same repos) ran **$4.73 (−29%)**;
-drain tranche 1's heavy mix ran $6.24 with refusals at $0.81 — vs
-~$27 median for the full-audit lane this substitutes. The pilot's
-~32% resolver-refusal rate is pre-routed away at the router
-(`build_rescan_worklist.py` refusal pre-route). Individual runs need
-no approval; batch/drain dispatch is scheduled by the operator
-(docs/continuous-operations.md, trickle-drain).
+**Fleet dispatch is an operator decision, informed by the deployment's
+measured cost per run.** There is no fixed cost gate. Diffs the resolver
+would refuse are pre-routed away at the router (`build_rescan_worklist.py`
+refusal pre-route). Individual runs need no approval; batch/drain dispatch
+is scheduled by the operator (docs/continuous-operations.md, trickle-drain).
 
 ### Step 0 (replaces recon) — resolve the baseline and scope package
 
@@ -183,7 +177,7 @@ Run the deterministic resolver (it routes attention only — it never
 authors a finding):
 
 ```bash
-python3 <skill-base>/resolve_baseline.py <target-dir> \
+python3 <skill-base>/scripts/resolve_baseline.py <target-dir> \
     [--db <workspace>/analysis-results/graph/findings.db] \
     [--since <commit>] [--baseline <audit.json>] \
     --out /tmp/<repo>-diff-scope.json
@@ -222,7 +216,7 @@ review agents judge (this replaces the manual symbol-index build/query
 choreography — the builder runs it for you):
 
 ```bash
-python3 <skill-base>/build_diff_packet.py \
+python3 <skill-base>/scripts/build_diff_packet.py \
     --scope /tmp/<repo>-diff-scope.json \
     --out /tmp/<repo>-diff-packet.json
 ```
@@ -263,6 +257,13 @@ packet in one pass, scoring confidence inline instead of spawning
 Step 3b subagents (the findings count on such diffs is almost always
 0–3; per-finding scorer subagents cost more than they calibrate).
 
+**Review surfaces in the diff.** When a changed file or caller touches a
+credential verifier, a security flag or its readers, an outbound call, an
+owner lookup, a route guard or a content-assembly path, the cluster's brief
+names the matching review surface and its check (REVIEW SURFACES in the
+brief). The scan's `review_surface_coverage` answers each surface the diff
+touches with `finding` or `negative`, and the rest `out_of_scope` (Step 4).
+
 ### Deterministic pre-scanners — changed set only
 
 Run the standard wrappers, restricted to the changed set (record each
@@ -278,8 +279,16 @@ as `"ran"`/`"skipped: <reason>"` in
 - `scan_k8s_hardening.py <target-dir>` — only when Kubernetes YAML is
   among the changed files; use only the `KHS-*` facts citing changed
   manifests.
-- `run_osv_scanner.py --repo <target-dir>` — only when the scope
-  package says `deps_manifests_changed: true`.
+- `python3 -m traust.cli adapters osv --repo <target-dir>` (OSV API) —
+  only when the scope package says `deps_manifests_changed: true`.
+  `status: degraded` (exit 3) is recorded as
+  `"osv-scanner": "degraded: <counts>"`, `status: failed` (exit 2) as
+  `"osv-scanner": "failed: <failure.status>"`; neither is ever clean.
+  Candidates with `version_basis: resolved` or `resolved-default` come
+  from deps.dev resolution of a manifest without a lockfile: an
+  approximation, never promoted on their own (see `/secure-code-audit`,
+  *Deterministic dependency pre-scan*, item 4). `dependency_scope: test`
+  / `dev` marks test or dev dependencies, which are not shipped code.
 
 ### Dedupe against the baseline
 
@@ -318,7 +327,7 @@ makes every diff-scoped report auditable for what it diffed against.
 ```json
 "spend": {
   "skill": "vuln-scan", "mode": "diff",
-  "model": "<resolved via python3 -m traust.cli registry models resolve>",
+  "model": "<python3 -m traust.cli registry models resolve vuln-scan>",
   "tokens_in": 0, "tokens_out": 0, "usd": null, "subagents": 0
 }
 ```
@@ -385,10 +394,11 @@ exactly as it does to files read from the checkout.
    `templated_files` accounting exactly as `/secure-code-audit`'s
    *Deterministic pre-scan* section prescribes. Its `tenancy_signals`
    (cluster-scoped RBAC, `InsecureSkipVerify` call sites, watch scope)
-   also seed code-level focus areas. Record the run in the output
-   `metadata.tools`. Skip when the target has no Kubernetes YAML, recording
-   `"k8s-hardening": "skipped: <reason>"` in the output
-   `metadata.additional.deterministic_steps` (`"ran"` when it executes).
+   also seed code-level focus areas. Record the run as
+   `"k8s-hardening": "ran"` in the output
+   `metadata.additional.deterministic_steps` (vuln-findings `metadata` has no
+   `tools` field), or `"skipped: <reason>"` when the target has no
+   Kubernetes YAML.
 7. **Deterministic semantic pre-scan.** If `opengrep` is on `PATH`, run
    python3 -m traust.cli adapters opengrep <target-dir> --out /tmp/<repo>-opengrep.json
    and hand each focus-area subagent the facts in its area as candidate
@@ -413,10 +423,18 @@ to (a) diff enforcement-layer references against their siblings' guards
 (a check every neighbor performs but one path skips is a finding),
 (b) verify any documented guard on *every* alternate path to the same
 sink (launch/bulk/schedule/copy; REST/websocket/callback), and
-(c) enumerate all emitters to an unchecked sink before rating it. On
+(c) enumerate all emitters to an unchecked sink before rating it, and
+(d) apply the check for each review surface
+([review-surfaces.md](../secure-code-audit/review-surfaces.md)) that the
+focus area touches, reporting what it examined. On
 targets ≥ ~50 kLoC add one **shadow lane**: a subsystem-scoped
 depth-first subagent with no vulnerability-class checklist, merged
 through the same triage bar.
+
+**Model routing.** Run the scan, and every review and scoring subagent, on
+the model `python3 -m traust.cli registry models resolve vuln-scan` returns
+(the `vuln-scan` role, floor `opus-class`). Never name a model ID in the
+brief.
 
 Unless `--single`, spawn **one Task subagent per focus area** in parallel.
 Cap at 10 concurrent. Each subagent gets the review brief below with its
@@ -452,6 +470,13 @@ story at all — but if you're unsure whether something is real, REPORT IT
 with a low confidence score rather than dropping it. A downstream triage
 step does the rigorous verification; your job is to not miss things.
 
+DEPTH: (a) compare each enforcement check with its siblings: a guard every
+neighbour applies but one path skips is a finding; (b) verify a documented
+guard on every alternate path to the same sink (bulk, scheduled, copy,
+websocket, callback); (c) find every emitter into an unchecked sink before
+rating it; (d) apply the check for each review surface below that your focus
+area touches, and report what you examined.
+
 WHAT TO LOOK FOR:
 
   MEMORY SAFETY (C/C++ and unsafe/FFI blocks) — HIGH VALUE:
@@ -472,6 +497,27 @@ WHAT TO LOOK FOR:
   - TOCTOU on a security check
   - hardcoded secrets, weak crypto, broken cert validation
   - sensitive data (secrets, PII) in logs or error responses
+
+  REVIEW SURFACES — HIGH VALUE (the six surfaces audits most often miss;
+  check each one your focus area touches):
+  - credential-acceptance: a verifier that accepts a credential issued for
+    another purpose (another audience, a short-lived or refresh token), or
+    that revoking the credential does not stop
+  - ownership-resolution: an owner lookup by name or pattern (unescaped
+    `_`/`%` in LIKE/ILIKE, prefix match) that lets one owner reach another
+    owner's objects, on read, rename or delete paths
+  - security-flags: a shipped default that switches a control off, a
+    control that fails open when unconfigured, a hardcoded key used to sign
+    or encrypt. The defect is the default, so this is reportable even
+    though the flag itself is operator-set.
+  - outbound-fetch: a request whose destination someone other than the
+    operator controls (input, stored config, a value read from an
+    unverified token) that skips the SSRF guard its siblings use
+  - stored-content-integrity: the bytes verified and the bytes stored
+    differ (assembly offsets, partial or clamped copies), especially in a
+    deduplicated store
+  - scope-enforcement: a route or credential type that skips the scope or
+    role check its siblings apply
 
   LOW VALUE — note briefly, keep looking:
   - null-pointer deref at small fixed offsets with no attacker control
@@ -514,7 +560,14 @@ OUTPUT — one block per finding, nothing else:
 <description>{root cause, attacker control, trigger condition, data flow from entry to sink. Cite line numbers.}</description>
 <exploit_scenario>{concrete attack: what input, from where, causing what outcome}</exploit_scenario>
 <recommendation>{specific fix: parameterize the query, bounds-check before memcpy, etc.}</recommendation>
+<review_surface>{the review surface the defect sits on, from the six ids below, or none}</review_surface>
 </finding>
+
+Then one block per review surface you examined, whether or not it gave a
+finding, so the report can record what was checked. Use only these six ids;
+anything else is a finding or nothing:
+
+<surface id="{credential-acceptance | ownership-resolution | security-flags | outbound-fetch | stored-content-integrity | scope-enforcement}">{what you examined: files, call sites or the exact search pattern, and the result}</surface>
 
 SEVERITY — use the harness's shared five-level scale (same enum as
 secure-code-audit and triage):
@@ -765,6 +818,55 @@ convention as `<repo>-security-audit.{json,md}` and
 Findings are sorted by `confidence` desc (then severity, file, line), so
 the top of the file is the highest-signal material.
 
+**Review-surface coverage (required from traust 0.21.0).** Add a top-level
+`review_surface_coverage` recording how this scan answered each of the six
+review surfaces in [review-surfaces.md](../secure-code-audit/review-surfaces.md).
+Every surface needs an entry, and every status except `finding` needs a
+`note`. This report has no `negative_results`, so a `negative` note says
+what was examined. Build the record from the review subagents' output:
+- `finding`: `finding_ids` lists every reported finding whose
+  `<review_surface>` is this surface. A finding sits on the surface where the
+  defect is, whatever its CWE. When Step 3 merges duplicates of one defect
+  that name different surfaces, keep one finding and the one surface where
+  the defect sits, and say so in its `confidence_reason`.
+- `negative`: no finding names the surface, and at least one subagent
+  examined it and found nothing. The note combines what each one examined. A
+  subagent that claims a problem without filing a finding doesn't count.
+  When the surface's only defect is a known baseline finding (deduped into
+  `known_findings`), the surface is `negative` for this scan, and the note
+  names the baseline id: the audit's record already carries that finding.
+- `not_applicable`: only when a subagent states the surface doesn't exist
+  anywhere in the target. "Not in my focus files" means the subagent didn't
+  examine the surface; it neither supports `not_applicable` nor counts as a
+  `negative`.
+- A surface no subagent examined is `not_assessed` on a full scan, or
+  `out_of_scope` on a `--diff` scan whose diff doesn't touch it, never
+  `negative`.
+
+| Status | Use when |
+|---|---|
+| `finding` | a finding in this report is on the surface. `finding_ids` names its `findings[].id`. |
+| `negative` | the surface was in scope and examined, and nothing was found. The note names the files or call sites checked. |
+| `out_of_scope` | `--diff` only: none of the in-scope diff files touch the surface. Changed files the resolver's first-party filter drops don't count. |
+| `not_applicable` | the surface does not exist in the target. |
+| `not_assessed` | the surface was in scope but not examined (budget, truncation). The note is enough; this report has no `coverage_gaps`. |
+
+```json
+"review_surface_coverage": {
+  "credential-acceptance": {"status": "out_of_scope", "note": "diff does not touch authentication"},
+  "ownership-resolution": {"status": "out_of_scope", "note": "no lookup by owner in the diff"},
+  "security-flags": {"status": "negative", "note": "settings.py: new DEBUG_SIGNUP flag read in 2 places, neither disables a control"},
+  "outbound-fetch": {"status": "finding", "finding_ids": ["EXAMPLE_REPO-abc1234-001"]},
+  "stored-content-integrity": {"status": "not_applicable", "note": "no content-addressed store"},
+  "scope-enforcement": {"status": "out_of_scope", "note": "no route or guard changes"}
+}
+```
+
+A full (non-diff) scan never uses `out_of_scope`. `/track-findings` merges
+the record into the repo's `*-findings-current.json`: a `finding` or
+`negative` from this scan updates the current record, while
+`out_of_scope`, `not_applicable` and `not_assessed` leave it as it was.
+
 **Validation gate.** The scan is not complete until the deterministic
 validator passes (`contracts/schemas/vuln-findings.schema.json` is auto-detected from
 the filename; it machine-enforces id derivation from
@@ -933,7 +1035,7 @@ progress-tracker/metrics/estimate-calibration-analysis.md §F5):
 
 ```bash
 python3 -m traust.cli registry models spend --skill vuln-scan \
-    --model <resolved model id> [--tokens-in <N>] [--tokens-out <N>] \
+    --model <python3 -m traust.cli registry models resolve vuln-scan> [--tokens-in <N>] [--tokens-out <N>] \
     --repo <target-slug> --loc <target size, if known> [--batch <batch-id>]
 ```
 

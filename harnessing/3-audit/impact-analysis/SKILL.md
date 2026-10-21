@@ -219,6 +219,12 @@ python3 harnessing/3-audit/impact-analysis/scripts/fetch_advisory.py csaf <cve-i
 When symbols aren't in the advisory, read the fix commit diff to identify
 the affected API surface.
 
+**The vulnerable range and fixed version come from a fetched advisory,
+never from memory.** If every fetch above fails (non-zero exit), stop and
+report the CVE as not assessed. Never supply `--vulnerable-range` or
+`--fixed-version` from recall. Record each advisory you used in
+`advisory_sources`.
+
 ### Step 2: Run the analysis
 
 ```bash

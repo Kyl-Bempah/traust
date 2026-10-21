@@ -172,9 +172,12 @@ credential type that bypasses fresh-login or scope limits altogether.
 
 ## Recording coverage
 
-Every code-profile report carries `review_surface_coverage`: an object with
-one entry per surface, each `{"status": ...}` with one of four statuses
-(`review_surface_status` in traust-contracts). The schema requires all six,
+Every code-profile report (from traust 0.20.0) and rpm-profile report (from
+0.21.0) carries `review_surface_coverage`: an object with one entry per
+surface, each `{"status": ...}` with one of the `review_surface_status`
+values in traust-contracts. This section's table and example are for
+audit reports; scans record coverage differently (see
+[Scans that follow an audit](#scans-that-follow-an-audit)). The schema requires all six,
 and `traust reporting validate` checks each entry against the rest of the
 report, so a surface left out or pointed at nothing fails validation.
 
@@ -184,6 +187,7 @@ report, so a surface left out or pointed at nothing fails validation.
 | `negative` | the surface was examined and nothing was found | a `negative_results` entry whose `area` **starts with the surface ID** (e.g. `"outbound-fetch"` or `"outbound-fetch (identity-provider client)"`), saying what was examined |
 | `not_applicable` | the surface does not exist in the target (no credentials accepted, no store) | a `note` saying why |
 | `not_assessed` | the surface applies but was not examined (scoped, partial or truncated audit) | a `note`, and a `metadata.additional.coverage_gaps` entry `{"tool": "review-surfaces", "system": "<surface>", "reason": "..."}` |
+| `out_of_scope` | a diff-scoped review whose diff does not touch the surface (used by the scans below; an audit reviews the whole target) | a `note` |
 
 ```json
 "review_surface_coverage": {
@@ -198,6 +202,43 @@ report, so a surface left out or pointed at nothing fails validation.
 
 `not_applicable` and `not_assessed` are not clean results: one is a judgment
 that the surface is absent, the other a recorded gap.
+
+### Scans that follow an audit
+
+`/vuln-scan` and `/verify-remediation` record the same six-surface
+`review_surface_coverage` in their own reports, from traust 0.21.0, for the
+code they reviewed: the whole tree, a `--diff`, or the regression-scan scope.
+Those reports have no `negative_results`, so every status except `finding`
+needs a `note`, and a `negative` note says what was examined. A scan's
+`not_assessed` needs only the note: scan reports carry no `coverage_gaps`.
+For a `--diff` or regression-scan scope, a surface is touched only by the
+files in that scope; changed files the scope excludes (for example, ones the
+diff resolver's first-party filter drops) don't count. `finding_ids`
+name the scan's own findings: a vuln-scan's `findings[].id`, or a
+verification's `regressions[].id` or a re-checked `original_id`.
+
+`/track-findings` merges each scan's record into the repo's
+`*-findings-current.json`, oldest first, using only scans dated on or after
+the audit:
+- A `finding` adds its finding IDs to the surface's entry, or replaces any
+  other status.
+- A `negative` replaces a `negative`, `not_applicable` or `not_assessed`
+  entry, but never a `finding` entry while any of its findings is still
+  open. Its note becomes a `negative_results` entry in the cumulative report.
+- A scan's `out_of_scope`, `not_applicable` and `not_assessed` change
+  nothing.
+
+An audit with no record of its own (one from before traust 0.20.0) starts
+every surface at `not_assessed`, with a matching `coverage_gaps` entry, once
+a scan record applies. `metadata.additional.cumulative.review_surface_sources`
+names the scan report that last answered each surface.
+
+### Threat-model tags
+
+`/threat-model` tags each threat, entry point and deprioritized threat with
+`review_surfaces`, the surfaces it sits on. A tagged deprioritized threat
+records a surface the model checked and set aside. The audit's threat-model
+coverage diff uses all three to map modelled surfaces to its record.
 
 ## Negative results from searches
 

@@ -325,7 +325,7 @@ how long they can wait.
 
 | Arrival channel | Mechanism | Latency |
 |---|---|---|
-| New CVE in a dependency | deps lane: osv-scanner on new advisories → `/impact-analysis` reachability | daily, deterministic |
+| New CVE in a dependency | deps lane: OSV API fleet sweep on new advisories → `/impact-analysis` reachability (not available air-gapped) | daily, deterministic |
 | New vuln introduced by a code change | change-detection loop: rule-2 fulls (weekly batches), rule-3 sensitive fulls/diffs (monthly), rule-5 diffs (quarterly) | days–quarter, by risk |
 | Existing vuln the audits missed (FN) | quarterly class sweeps at measured FN classes; rule-4 ceiling audits; dual-pass default | quarterly + ceilings |
 | New vuln class / detection technique | methodology events: recall-raising harness release → P0 re-audit ≤1 week; ceilings re-apply improvements fleet-wide | ≤1 week (P0) |

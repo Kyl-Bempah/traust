@@ -41,7 +41,9 @@ measurable (capability C1 of the roadmap;
 ## Two rules that are never waived
 
 1. **Contamination rule.** The manifest
-   (`progress-tracker/configs/benchmark-targets.yaml`) is the answer key. It
+   (`$TRAUST_CONFIG_HOME/benchmark-targets.yaml`, kept in the deployment's
+   private config repository; template `config/benchmark-targets.example.yaml`)
+   is the answer key. It
    must never be readable from inside an audited checkout, audit agents must
    never be told they are being benchmarked (a prompted agent behaves
    differently), and benchmark audit prompts must not name this skill, the
@@ -88,14 +90,14 @@ For each candidate under review:
 
 ### `canaries` — prompt-injection fixtures (capability C2)
 
-Canary sources live in `progress-tracker/configs/benchmark-canaries/<name>/`
+Canary sources live in `$TRAUST_CONFIG_HOME/recall-benchmark/canaries/<name>/`
 as `{canary.yaml, tree/…}` — canary.yaml is the answer key and never enters
 the materialized repo. Materialize + register:
 
 ```bash
 python3 harnessing/recall-benchmark/scripts/build_canaries.py \
-    --sources progress-tracker/configs/benchmark-canaries \
-    --manifest progress-tracker/configs/benchmark-targets.yaml
+    --sources "$TRAUST_CONFIG_HOME/recall-benchmark/canaries" \
+    --manifest "$TRAUST_CONFIG_HOME/benchmark-targets.yaml"
 ```
 
 Each canary is a `seeded` target with an `injection` block (class +
@@ -108,6 +110,33 @@ itself reports the injection attempt count as vigilance
 split: injection resistance must never regress silently. The post-hoc
 field screen is `harnessing/recall-benchmark/scripts/screen_injection.py` (report-only; every hit is
 a human review item).
+
+### Seeded fixtures — synthetic apps with several known defects
+
+A seeded fixture is a small synthetic app with one planted instance of each
+defect class it measures. Its source lives in
+`$TRAUST_CONFIG_HOME/recall-benchmark/seeded/<name>/` as `{seed.yaml, tree/…}`.
+`seed.yaml` names the fixture (and optionally its `language`) and lists one
+`expected` entry per planted defect: `cwes`, `paths`, `severity` and
+`title`. It has no `injection` block. `build_canaries.py` materializes it as a
+`bt-seeded-<name>` target:
+
+```bash
+python3 harnessing/recall-benchmark/scripts/build_canaries.py \
+    --sources "$TRAUST_CONFIG_HOME/recall-benchmark/seeded" \
+    --manifest "$TRAUST_CONFIG_HOME/benchmark-targets.yaml"
+```
+
+A separate directory keeps the canaries' entries untouched when a seeded
+fixture is added.
+
+- **Each defect in its own file.** Matching is by path and CWE, so two
+  defects sharing a file and a CWE can't be told apart.
+- **Nothing in `tree/` may hint at the answers:** no comments describing a
+  defect, and no names like "vulnerable" or "seeded". Contamination rule 1
+  applies to the code as much as to the manifest.
+- **Development split only.** Whoever wrote a fixture has read its answer
+  key, so a seeded fixture can never be held out.
 
 ### `run` — fresh audits on clean clones
 
@@ -134,7 +163,7 @@ For each admitted (non-held-out unless `--release`) target, optionally
 
 ```bash
 python3 harnessing/recall-benchmark/scripts/match_benchmark.py \
-    --manifest progress-tracker/configs/benchmark-targets.yaml \
+    --manifest "$TRAUST_CONFIG_HOME/benchmark-targets.yaml" \
     --runs-dir /tmp/recall-bench/runs \
     --out-dir progress-tracker/metrics/dashboards/benchmark [--include-held-out]
 ```
@@ -158,7 +187,7 @@ were human- or machine-reviewed.
 
 | File | Purpose |
 |---|---|
-| `progress-tracker/configs/benchmark-targets.yaml` | The ground-truth manifest (answer key — contamination rule applies) |
+| `$TRAUST_CONFIG_HOME/benchmark-targets.yaml` | The ground-truth manifest (answer key — contamination rule applies) |
 | `benchmark/benchmark.json` | Machine-readable scores + per-target detail |
 | `benchmark/benchmark.md` | One-pager with recall tables, stability, population block |
 | metrics ledger row (`benchmark`) | recall_strict / stability series for trending |
@@ -167,7 +196,7 @@ were human- or machine-reviewed.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `contamination guard` exit | manifest placed inside runs dir | keep the manifest in progress-tracker/configs/ |
+| `contamination guard` exit | manifest placed inside runs dir | keep the manifest in the config home |
 | Target skipped `wrong clone` | audit ran against the default branch, not `pre_fix_sha` | re-run that target's clone+checkout step |
 | Recall drops sharply on one CWE class | methodology regression for that class | diff the class's near-misses; file a prompt fix; re-run the class |
 | Held-out ≫ development gap | benchmark overfitting (Goodhart) | rotate held-out set; audit recent prompt changes against dev targets |

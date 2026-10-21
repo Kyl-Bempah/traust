@@ -26,9 +26,11 @@
 #     `probe`.
 #
 # NOT HERE, deliberately:
-#   - Tool-managed vulnerability DBs (grype, govulncheck, osv-scanner):
-#     the tools own their refresh; watched by `external-tools:*` for the
-#     binary and `grype-db` for grype's DB content age.
+#   - Tool-managed vulnerability DBs (grype, govulncheck): the tools own
+#     their refresh; watched by `external-tools:*` for the binary and
+#     `grype-db` for grype's DB content age. OSV is queried through its API
+#     (the `osv` source below); an air-gapped deployment's offline OSV
+#     database is the adopter's (see `access` on that source).
 #   - MITRE ATT&CK: vendored + sha256-pinned under
 #     harnessing/attack-coverage/tables/, advanced by a reviewed commit.
 #   - Non-security reference registries: `product-definitions` (the Red
@@ -177,6 +179,29 @@ sources:
       package query returns GHSA-prefixed ids).
     url_template: https://api.osv.dev/v1/query
     method: POST
+    # HOW THE DEPENDENCY PRE-SCAN REACHES OSV — `api` (default) or `air-gapped`.
+    #
+    #   api         The engine reads the checkout's lockfiles and manifests and
+    #               queries the OSV API at url_template. Nothing to install or
+    #               keep current. If the API cannot be used at all, the scan
+    #               fails fast: `status: failed`, exit 2, no dependency results
+    #               (never "no advisories").
+    #
+    #   air-gapped  For deployments with no route to the OSV API. The pre-scan
+    #               (`traust adapters osv`) runs osv-scanner offline against a
+    #               local OSV database instead. The ADOPTER provides both: the
+    #               harness does not install osv-scanner or its database, and
+    #               does not keep them current. Download the database on a
+    #               connected host (`osv-scanner scan source
+    #               --download-offline-databases --offline-vulnerabilities
+    #               <any dir>`), copy the cache directory across, and set
+    #               OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY to it on the scanning
+    #               host. The database is only as current as your last copy.
+    #               Missing binary or database = `status: failed`, exit 2.
+    #               The other OSV consumers listed below query the API and are
+    #               unavailable in this mode; they report the lookup as failed.
+    #               See docs/setup.md "Air-gapped OSV scanning".
+    access: api
     ident: package
     probe:
       ident: lodash
@@ -188,6 +213,7 @@ sources:
       - harnessing/3-audit/secure-code-audit/scripts/run_fork_advisory_lag.py
       - traust.cli.resolve_advisory_symbols
       - traust.ops.cve_replay_monitor
+      - traust.cli adapters osv (traust_engine.adapters.osv, the dependency pre-scan)
     license:
       id: pass-through
       terms: >-
@@ -195,6 +221,44 @@ sources:
         CC0/MIT/BSD).
       url: https://osv.dev/
       verified: 2026-07-18
+
+  deps_dev:
+    tier: live
+    summary: >-
+      deps.dev (Google) — resolved dependency graphs for npm, PyPI, Maven and
+      Cargo package versions. The dependency pre-scan uses it to resolve the
+      transitive tree of manifests that have no lockfile.
+    # ON BY DEFAULT; opt out with `access: disabled` (owner decision
+    # 2026-10-21). Then manifests without a lockfile stay coverage gaps
+    # (`transitive_coverage: partial`).
+    #
+    # TERMS: use of the API is subject to the Google APIs Terms of Service
+    # (https://developers.google.com/terms), which bind the operator who runs
+    # it: Google sets usage limits at its discretion (2.d), may discontinue
+    # the API at any time (8.a), California law and venue apply and a
+    # business operator indemnifies Google for misuse (9.c, 10.c). The data
+    # traust stores, resolved package/version pairs, is deps.dev-generated
+    # data licensed CC BY 4.0, and deps.dev expressly permits caching; every
+    # scan carries the attribution in metadata.resolution.attribution.
+    # Not used air-gapped (no offline mode).
+    url_template: https://api.deps.dev/v3/systems/{ident}
+    access: api
+    probe:
+      ident: npm/packages/express/versions/4.17.1:dependencies
+      expect_status: 200
+    consumers:
+      - traust.cli adapters osv (traust_engine.adapters.osv resolve_transitive)
+    license:
+      id: CC-BY-4.0
+      terms: >-
+        Data deps.dev generates (resolved dependency graphs, advisory
+        statistics) is CC BY 4.0; aggregated upstream data keeps its source's
+        terms (traust uses only resolved package/version pairs). API use is
+        subject to the Google APIs Terms of Service. Attribution: "Resolved
+        dependency data: deps.dev (Google LLC), https://deps.dev, licensed
+        under CC BY 4.0".
+      url: https://docs.deps.dev/api/v3/
+      verified: 2026-10-21
 
   nvd:
     tier: live

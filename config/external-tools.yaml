@@ -11,7 +11,8 @@
 #   - the platform orchestrator's job-image build — install exactly the
 #     `expected` versions so the image and the checker can never
 #     disagree about what should be present (continuous-operations.md,
-#     "Credentials & service accounts for autonomous runs").
+#     "Credentials & service accounts for autonomous runs"). Rows with
+#     `provided_by: adopter` are the exception: never installed.
 #
 # Deliberately absent: checkov + bicep (hard-pinned in
 # harnessing/3-audit/cloud-config-audit/scripts/run_checkov.py, watched by the
@@ -59,11 +60,20 @@ tools:
     expected: "0.115.0"
     consumers: [secure-container-audit, secure-code-audit]
 
+  # AIR-GAPPED ONLY, adopter-provided (owner decision 2026-10-20). OSV is
+  # queried through its API by default; a deployment with `access:
+  # air-gapped` on the osv source in feeds.yaml runs osv-scanner offline
+  # instead (docs/setup.md "Air-gapped OSV scanning"). The harness, the
+  # install script and the job image do NOT install it or its database, so
+  # it is in no profile (`consumers: []`). The row stays so `expected` names
+  # the version we have tested, and the drift row keeps that pin current:
+  # when osv-scanner is absent it compares the pin itself with upstream.
   - name: osv-scanner
     version_cmd: ["osv-scanner", "--version"]
     upstream: {kind: github, ref: google/osv-scanner}
-    expected: "2.4.0"
-    consumers: [secure-rpm-audit, secure-code-audit, vuln-scan, dependency-watch]
+    expected: "2.7.0"
+    provided_by: adopter
+    consumers: []
 
   - name: cosign
     version_cmd: ["cosign", "version"]

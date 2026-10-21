@@ -39,6 +39,15 @@ execution):
                Python  os.environ.get(K, D) / os.getenv(K, D)
                JS/TS   process.env.K || D / process.env.K ?? D
              sink = the consumption site itself.
+  python-settings
+             literals in settings modules (settings*.py, config*.py,
+             conf.py) and in settings classes (names ending Settings,
+             Config or Configuration, or extending BaseSettings), parsed
+             with ast and never imported; sink = the setting's readers
+             (settings.X, config.X, app.config["X"], config.get("X"),
+             getattr(settings, "X")). A credential-shaped literal is
+             reported as `<hardcoded literal, N chars>` with
+             `literal_redacted` and `weak_default`, never copied out.
 
 Scope guard (plan D3 risk c): shipped defaults plus each SINGLE documented
 override file — never the override cross-product. The measured misses are
@@ -62,6 +71,7 @@ Exit 0 on a completed expansion (gaps included); 1 on bad input.
 from __future__ import annotations
 
 import argparse
+import ast
 import datetime
 import json
 import re
@@ -106,7 +116,8 @@ CLASS_PATTERNS = [
         re.compile(
             r"(auth|anonymous|no[_-]?login|allow[_-]?guest|rbac|"
             r"authoriz|authentic|oidc|oauth|token[_-]?(auth|required)|"
-            r"api[_-]?key|basic[_-]?auth|require[_-]?(auth|login))",
+            r"api[_-]?key|basic[_-]?auth|require[_-]?(auth|login)|csrf|"
+            r"skip[_-]?auth|verify\w*signature|signature\w*verif)",
             re.I,
         ),
     ),
@@ -114,7 +125,8 @@ CLASS_PATTERNS = [
         "secret",
         re.compile(
             r"(password|passwd|secret|credential|private[_-]?key|"
-            r"access[_-]?key|client[_-]?secret)",
+            r"access[_-]?key|client[_-]?secret|signing[_-]?key|encryption[_-]?key|"
+            r"hmac[_-]?key|(?<![a-z])salt(?![a-z]))",
             re.I,
         ),
     ),
@@ -130,7 +142,7 @@ CLASS_PATTERNS = [
         "debug",
         re.compile(
             r"(debug|pprof|profil|trace[_-]?enabled|verbose|dev[_-]?mode|"
-            r"development[_-]?mode|test[_-]?mode)",
+            r"development[_-]?mode|test[_-]?mode|\btesting\b)",
             re.I,
         ),
     ),
@@ -227,17 +239,78 @@ def _line_of(text: str, needle: str) -> int | None:
     return None
 
 
+#: last-segment name endings that hold a credential
+_CRED_SUFFIXES = ("key", "token", "salt", "secret", "password", "passwd")
+#: ...except these (compared without _ and -), which name a non-secret value
+_NOT_SECRET_NAMES = {
+    "primarykey",
+    "foreignkey",
+    "publickey",
+    "sortkey",
+    "partitionkey",
+    "cachekey",
+    "idempotencykey",
+}
+#: user:password@ in a URL literal (a DSN with an embedded credential)
+URL_USERINFO_RX = re.compile(
+    r"(?P<scheme>[a-z][a-z0-9+.-]*://)(?P<user>[^:/@\s]*):(?P<pw>[^@/\s]+)@", re.I
+)
+
+
+def _credential_name(key) -> bool:
+    """A key whose last segment ends in a credential word at a word boundary:
+    SIGNING_KEY, apiToken, session-secret; not monkey or public_key."""
+    seg = re.split(r"[./]", str(key))[-1]
+    low = seg.lower()
+    if re.sub(r"[_-]", "", low) in _NOT_SECRET_NAMES:
+        return False
+    for suffix in _CRED_SUFFIXES:
+        if low == suffix:
+            return True
+        if low.endswith(suffix) and len(seg) > len(suffix):
+            before, first = seg[-len(suffix) - 1], seg[-len(suffix)]
+            if before in "_-" or (first.isupper() and before.islower()):
+                return True
+    return False
+
+
+def _redact(key, value):
+    """(shown value, redacted?): a credential in a default is never copied out.
+
+    A literal under a secret-class or credential-shaped name is replaced by
+    its length; a URL's embedded password is masked. Templated or
+    environment-reference values (`${X}`, `{{ .Values.x }}`) are not
+    literals and are left alone."""
+    if not isinstance(value, str) or not value or "${" in value or "{{" in value:
+        return value, False
+    if classify(key, "")[0] == "secret" or _credential_name(key):
+        return f"<hardcoded literal, {len(value)} chars>", True
+    masked, n = URL_USERINFO_RX.subn(r"\g<scheme>\g<user>:<redacted>@", value)
+    return (masked, True) if n else (value, False)
+
+
 def make_triple(key, value, system, path, line, sink=None):
-    cls, relevant = classify(key, value)
+    shown, redacted = _redact(key, value)
+    cls, relevant = classify(key, "" if redacted else value)
+    if redacted and not relevant:
+        cls, relevant = "secret", True
+    if redacted and isinstance(sink, dict) and isinstance(sink.get("expr"), str):
+        # the consumption expression quotes the literal too
+        sink = {**sink, "expr": sink["expr"].replace(value, str(shown))}
     t = {
         "key": str(key),
-        "effective_default": "" if value is None else str(value),
+        "effective_default": "" if shown is None else str(shown),
         "source": {"system": system, "path": path, "line": line},
         "sink": sink or {"status": "unresolved"},
         "class": cls,
         "judgement_required": relevant,
     }
-    if relevant and is_weak(value):
+    if redacted:
+        # A hardcoded credential default is a weak default, and judged.
+        t["literal_redacted"] = True
+        t["weak_default"] = True
+        t["judgement_required"] = True
+    elif relevant and is_weak(value):
         t["weak_default"] = True
     return t
 
@@ -529,6 +602,193 @@ def expand_env_chain(repo: Path, triples: list, gaps: list):
 
 
 # --------------------------------------------------------------------------
+# tier: python settings (static: parsed with ast, never imported or run)
+# --------------------------------------------------------------------------
+
+#: settings modules by name: settings.py, settings_prod.py, config.py, conf.py
+PY_SETTINGS_FILE_RX = re.compile(r"^(settings|config|conf|configuration)([._-].*)?\.py$", re.I)
+#: settings classes by name (Flask-style ProductionConfig, Settings)
+PY_SETTINGS_CLASS_RX = re.compile(r"(Settings|Config|Configuration)$")
+#: bases whose fields are settings whatever their case (pydantic-settings)
+PY_SETTINGS_BASES = {"BaseSettings"}
+UPPER_NAME_RX = re.compile(r"^[A-Z][A-Z0-9_]*$")
+#: readers of a setting: settings.NAME, config.NAME, app.config["NAME"],
+#: config.get("NAME"), getattr(settings, "NAME")
+PY_READER_RXS = (
+    re.compile(r"\b(?:settings|config|conf|cfg)\s*\.\s*(?P<name>[A-Za-z_]\w*)"),
+    re.compile(r"\bconfig\s*(?:\.get\s*\(|\[)\s*[\"'](?P<name>[A-Za-z_]\w*)[\"']"),
+    re.compile(r"\bgetattr\s*\(\s*(?:settings|config|conf)\s*,\s*[\"'](?P<name>[A-Za-z_]\w*)[\"']"),
+)
+_TEST_FILE_RX = re.compile(r"(^|[._-])(test|spec|mock|fixture)s?([._-]|$)")
+#: test-only directories; settings there configure the test run, not a deployment
+_TEST_DIRS = {"tests", "test", "testing", "fixtures"}
+
+
+def _is_test_file(repo: Path, f: Path) -> bool:
+    parts = f.relative_to(repo).parts
+    return (
+        f.name == "conftest.py"
+        or bool(_TEST_FILE_RX.search(f.name.lower()))
+        or any(p in _TEST_DIRS for p in parts[:-1])
+    )
+
+
+def _base_names(node) -> set[str]:
+    names = set()
+    for b in node.bases:
+        if isinstance(b, ast.Name):
+            names.add(b.id)
+        elif isinstance(b, ast.Attribute):
+            names.add(b.attr)
+    return names
+
+
+def _literal(value_node):
+    """(ok, value) for a str/int/float/bool/None literal, else (False, None)."""
+    if isinstance(value_node, ast.Constant) and (
+        value_node.value is None or isinstance(value_node.value, (str, int, float, bool))
+    ):
+        return True, value_node.value
+    return False, None
+
+
+def _settings_assignments(body, field_ok):
+    """(name, value, line) for literal assignments in a module or class body."""
+    for stmt in body:
+        if isinstance(stmt, ast.Assign):
+            targets, value = stmt.targets, stmt.value
+        elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None:
+            targets, value = [stmt.target], stmt.value
+        else:
+            continue
+        ok, literal = _literal(value)
+        if not ok:
+            continue  # computed, or an env read the env-chain tier sees
+        for target in targets:
+            if isinstance(target, ast.Name) and field_ok(target.id):
+                yield target.id, literal, stmt.lineno
+
+
+def _python_readers(repo: Path) -> dict[str, list[dict]]:
+    """{setting name: [{path, line}]} for every reader in first-party Python."""
+    index: dict[str, list[dict]] = {}
+    for f in _walk(repo):
+        if f.suffix != ".py" or _is_test_file(repo, f):
+            continue
+        rel = _rel(repo, f)
+        for n, line in enumerate(_read(f).splitlines(), 1):
+            for rx in PY_READER_RXS:
+                for m in rx.finditer(line):
+                    index.setdefault(m.group("name"), []).append({"path": rel, "line": n})
+    return index
+
+
+_DSN_RX = dict(CLASS_PATTERNS)["dsn"]
+_BIND_ALL_RX = re.compile(r"^(0\.0\.0\.0|::|\[::\])(:\d+)?$")
+_TRUTHY = {"true", "1", "yes", "on"}
+
+
+def _classify_setting(name: str, value) -> tuple[str, bool]:
+    """Classify by the setting's NAME; its value only marks a DSN or a
+    bind-all listener address.
+
+    The shared classify() probes key=value, and Python settings values are
+    often module paths ("rbac.urls") that match class words by accident.
+    """
+    cls, relevant = classify(name, "")
+    if not relevant and isinstance(value, str):
+        if _DSN_RX.search(value):
+            return "dsn", True
+        if _BIND_ALL_RX.match(value.strip()):
+            return "listener", True
+    return cls, relevant
+
+
+def _weak_setting(cls: str, value) -> bool:
+    """A debug or test toggle is weak when ON; every other class as is_weak."""
+    if cls == "debug":
+        return str(value).strip().lower() in _TRUTHY
+    return is_weak(value)
+
+
+def _settings_triple(key, name, value, rel, line, readers):
+    sites = readers.get(name, [])
+    sink = (
+        {"status": "readers", "sites": sites[:10], "count": len(sites)}
+        if sites
+        else {"status": "unresolved"}
+    )
+    t = make_triple(key, value, "python-settings", rel, line, sink=sink)
+    if t.get("literal_redacted"):
+        return t
+    cls, relevant = _classify_setting(name, value)
+    t["class"], t["judgement_required"] = cls, relevant
+    t.pop("weak_default", None)
+    if relevant and _weak_setting(cls, value):
+        t["weak_default"] = True
+    return t
+
+
+def expand_python_settings(repo: Path, triples: list, gaps: list):
+    """Defaults declared in Python settings modules and settings classes.
+
+    Settings modules (settings*.py, config*.py, conf.py) contribute their
+    module-level UPPER_CASE literals. Settings classes, anywhere in
+    first-party Python, contribute their class-level literals: UPPER_CASE
+    names, or every field when the class extends BaseSettings. Each triple's
+    sink lists the setting's readers, since the worst reader sets severity.
+    Files are parsed, never imported: target code is untrusted input.
+    """
+    readers = None
+    unparsed = []
+    for f in _walk(repo):
+        if f.suffix != ".py" or _is_test_file(repo, f):
+            continue
+        text = _read(f)
+        is_module = bool(PY_SETTINGS_FILE_RX.match(f.name))
+        if not is_module and "class " not in text:
+            continue
+        try:
+            tree = ast.parse(text, filename=str(f))
+        except (SyntaxError, ValueError):
+            if is_module:
+                unparsed.append(_rel(repo, f))
+            continue
+        rel = _rel(repo, f)
+        found = []
+        if is_module:
+            for name, value, line in _settings_assignments(tree.body, UPPER_NAME_RX.match):
+                found.append((name, name, value, line))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            pydantic = bool(_base_names(node) & PY_SETTINGS_BASES)
+            if not (pydantic or PY_SETTINGS_CLASS_RX.search(node.name)):
+                continue
+
+            def field_ok(name, _all=pydantic):
+                return not name.startswith("_") and (_all or bool(UPPER_NAME_RX.match(name)))
+
+            for name, value, line in _settings_assignments(node.body, field_ok):
+                found.append((f"{node.name}.{name}", name, value, line))
+        if not found:
+            continue
+        if readers is None:
+            readers = _python_readers(repo)
+        for key, name, value, line in found:
+            triples.append(_settings_triple(key, name, value, rel, line, readers))
+    if unparsed:
+        gaps.append(
+            {
+                "system": "python-settings",
+                "reason": "settings module that does not parse — defaults not enumerated",
+                "paths": unparsed[:20],
+                "count": len(unparsed),
+            }
+        )
+
+
+# --------------------------------------------------------------------------
 # coverage-gap detection for systems v1 does not expand
 # --------------------------------------------------------------------------
 
@@ -587,6 +847,7 @@ def expand(repo: Path, max_triples: int) -> dict:
     expand_compose(repo, triples, gaps)
     expand_k8s(repo, triples, gaps)
     expand_env_chain(repo, triples, gaps)
+    expand_python_settings(repo, triples, gaps)
     detect_gaps(repo, gaps)
 
     # dedupe on (key, default, source path, line)

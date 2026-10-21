@@ -507,8 +507,9 @@ scanner checks mechanically.
      assessment on the patched checkout and compare results against the
      original. That skill owns the differential logic for crypto facts.
 4. **Record the runs** in the verification report: scanner versions (and
-   rule-pack SHA) in the report's metadata tools, plus a
-   `deterministic_steps` map (`"ran"` / `"skipped: <reason>"`) mirroring
+   rule-pack SHA) as `metadata.additional.tools` (verification `metadata`
+   has no `tools` field of its own), plus a
+   `metadata.additional.deterministic_steps` map (`"ran"` / `"skipped: <reason>"`) mirroring
    the audit convention — a verification performed without the scanners
    is evidentially weaker and must say so, never imply parity.
 5. **Emit it as typed evidence, by scanning BOTH revisions.** Steps 2–3
@@ -670,6 +671,12 @@ Review every file in the chosen scope for:
   sink with another, adding an allowlist with a bypass)
 - New RBAC grants, new container capabilities, new network exposure
 - Newly added dependencies without pinning
+
+Check the six review surfaces in
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md)
+against the same scope, and record the outcome for each in the report's
+`review_surface_coverage` (6b). A surface the scoped files don't touch is
+`out_of_scope`.
 
 #### 5c. Classify regressions
 
@@ -838,9 +845,33 @@ The report must validate against `contracts/schemas/verification.schema.json`
   "recommendations": [
     "<actionable next step for any unresolved or partially resolved findings>"
   ],
-  "notes": "<regression-scan scope decision, attribution caveats (squash merges, force-pushed history), and anything else a reviewer should know>"
+  "notes": "<regression-scan scope decision, attribution caveats (squash merges, force-pushed history), and anything else a reviewer should know>",
+  "review_surface_coverage": {
+    "credential-acceptance": {"status": "negative", "note": "auth/token.go: the fix adds an audience check; no other verifier changed"},
+    "ownership-resolution": {"status": "out_of_scope", "note": "no owner lookups in the regression-scan scope"},
+    "security-flags": {"status": "out_of_scope", "note": "no settings or flags changed"},
+    "outbound-fetch": {"status": "finding", "finding_ids": ["<REG-id>"]},
+    "stored-content-integrity": {"status": "not_applicable", "note": "no content-addressed store"},
+    "scope-enforcement": {"status": "out_of_scope", "note": "no route or guard changes"}
+  }
 }
 ```
+
+**`review_surface_coverage` (required from traust 0.21.0).** One entry for
+each of the six review surfaces, covering the Phase 5 regression-scan scope.
+Every status except `finding` needs a `note`, and a `negative` note says
+what was examined, because this report has no `negative_results`.
+- `finding`: `finding_ids` names a `regressions[].id` on the surface, or
+  the `original_id` of a re-checked finding that is still open on it.
+- `out_of_scope`: the scope does not touch the surface.
+- `not_applicable`: the surface does not exist in the target.
+- `not_assessed`: the surface is in scope but was not examined. The note
+  is enough; this report has no `coverage_gaps`.
+
+`/track-findings` merges the record into the repo's `*-findings-current.json`.
+A `finding` or `negative` updates the current record. `out_of_scope`,
+`not_applicable` and `not_assessed` leave it as it was, and a `negative`
+never replaces a surface whose findings are still open.
 
 #### 6c. Markdown rendering
 

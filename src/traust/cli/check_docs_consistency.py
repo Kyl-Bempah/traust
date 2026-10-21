@@ -19,17 +19,10 @@ pre-push hook runs alongside this checker):
    longer exists). Sibling-repo paths, externals, glob/placeholder patterns, and
    historical records (CHANGELOG) are intentionally skipped.
 
-3. Group-README check — the GitLab group profile page (sibling checkout
-   ../gitlab-profile/README.md) also states harness facts: the harness version
-   ("Harness version: vX.Y.Z", "harness **vX.Y.Z**") and skill/command counts.
-   When the sibling is checked out, those claims must match this repo's VERSION
-   file and tree counts; when it is not, the check is skipped. Drift here means
-   the GROUP README needs an update (and its own commit/push).
-
-4. Version-sync check — pyproject.toml's [project] version must equal the
+3. Version-sync check — pyproject.toml's [project] version must equal the
    VERSION file (it silently drifted 30 releases before this check existed).
 
-5. Symlink integrity — every symlink under .claude/ and .crush/ must resolve.
+4. Symlink integrity — every symlink under .claude/ and .crush/ must resolve.
    Catches half-removed wrapper pairs (a .crush command pointing at a deleted
    .claude wrapper), which the dead-path checks skip by design.
 
@@ -75,7 +68,6 @@ SIBLING_PREFIXES = (
     "progress-tracker/",
     "repo-verification/",
     "defending-code-reference-harness/",
-    "gitlab-profile/",
     "contracts/",
     "traust-ledger/",
     "schema/",
@@ -302,53 +294,6 @@ def dead_backtick_failures(repo: Path = REPO) -> list[str]:
                 continue  # only vet paths under known in-repo dirs
             if _status(t.rstrip("/"), md, repo) == "missing":
                 failures.append(f"{rel}: dead backtick path -> {token}")
-    return failures
-
-
-def _group_readme(repo: Path) -> Path:
-    return repo.parent / "gitlab-profile" / "README.md"
-
-
-# Group-README claims. Version lines must mention 'harness' so framework
-# versions (ASVS v5.0, SLSA v1.2, ...) are never matched; count patterns run
-# on text with markdown bold stripped so "**34** slash-command" matches.
-_GROUP_VERSION = re.compile(r"v(\d+\.\d+\.\d+)")
-_GROUP_COUNT_CHECKS = [
-    ("skills", re.compile(r"(\w+) skills")),
-    ("skills", re.compile(r"Skills \((\w+)\), by function")),
-    ("commands", re.compile(r"(\w+) (?:slash[- ]commands?|commands)")),
-]
-
-
-def group_readme_failures(repo: Path = REPO) -> list[str]:
-    """Vet harness facts stated on the group profile page, when checked out."""
-    readme = _group_readme(repo)
-    if not readme.is_file():
-        return []  # sibling not checked out (CI, standalone) — skip
-    raw = readme.read_text(encoding="utf-8")
-    rel = "../gitlab-profile/README.md"
-    failures = []
-
-    version = (repo / "VERSION").read_text(encoding="utf-8").strip()
-    for line in raw.splitlines():
-        if "harness" not in line.lower():
-            continue
-        for m in _GROUP_VERSION.finditer(line):
-            if m.group(1) != version:
-                failures.append(f"{rel}: claims harness v{m.group(1)} but VERSION is {version}")
-
-    expected = expected_counts(repo)
-    text = raw.replace("**", "")
-    for key, pat in _GROUP_COUNT_CHECKS:
-        for m in pat.finditer(text):
-            n = _to_int(m.group(1))
-            if n is None:
-                continue
-            if n != expected[key]:
-                failures.append(
-                    f"{rel}: claims {n} {key} ('{m.group(0)}') "
-                    f"but the harness tree has {expected[key]}"
-                )
     return failures
 
 
@@ -1285,7 +1230,6 @@ CHECKS = [
     ("enumeration coverage (skills/schemas in README + docs/skills.md)", coverage_failures),
     ("dead markdown links", dead_link_failures),
     ("dead backtick paths", dead_backtick_failures),
-    ("group README drift (../gitlab-profile)", group_readme_failures),
     ("version sync (pyproject.toml, version.args vs VERSION)", version_sync_failures),
     ("dangling symlinks (.claude/, .crush/)", symlink_failures),
     ("undocumented external tools (docs/external-dependencies.md)", external_tool_failures),
@@ -1322,10 +1266,6 @@ def main(argv=None) -> int:
     print(
         f"  tree: {counts['skills']} skills, {counts['commands']} commands, "
         f"{counts['scripts']} scripts, {counts['stages']} stages"
-    )
-    print(
-        "  group README: "
-        + ("checked" if _group_readme(repo).is_file() else "not checked out — skipped")
     )
     for name, failures in results.items():
         if failures:

@@ -2,12 +2,10 @@
 """Diff-mode context packet — the deterministic evidence bundle the
 review agents judge instead of exploring the checkout.
 
-The 50-repo pilot (2026-07-27) measured that a diff scan's cost tracks
-repo size and fixed exploration overhead, not diff size: the median run
-reviewed 640 changed lines yet cost $6.67, mostly agent turns spent
-re-deriving scope (recon reads, symbol lookups, baseline cross-checks)
-that a script derives deterministically for free. This builder folds
-all of that into ONE artifact:
+A diff scan's cost tracks repo size and fixed exploration overhead, not
+diff size: most agent turns go to re-deriving scope (recon reads, symbol
+lookups, baseline cross-checks) that a script derives deterministically
+for free. This builder folds all of that into ONE artifact:
 
   per cluster (from the resolver's scope package):
     - the changed hunks themselves (`git diff -U<ctx> <anchor>..HEAD`,

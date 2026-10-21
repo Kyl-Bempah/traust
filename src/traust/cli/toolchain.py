@@ -49,7 +49,7 @@ _HYBRID_INSTALL: dict[str, str] = {
 
 # Installed by scripts/install-toolchain.sh straight from the upstream GitHub
 # release at the pinned version — no intermediate package manager.
-_DIRECT_DOWNLOAD = {"opengrep", "gitleaks", "syft", "grype", "osv-scanner", "cosign", "govulncheck"}
+_DIRECT_DOWNLOAD = {"opengrep", "gitleaks", "syft", "grype", "cosign", "govulncheck"}
 
 
 def _tool_entry(tool: Any) -> dict[str, Any]:

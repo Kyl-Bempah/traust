@@ -49,7 +49,7 @@ decision cards and records the human's determinations through
 python3 -m traust.cli admin countersign, never by hand-assembling ledger events.
 
 **Paths:** `<skill-base>` is this skill's base directory; `<harness>` =
-`<skill-base>/../..`. The default findings root is the
+`<skill-base>/../../..`. The default findings root is the
 `analysis-results/findings` sibling of the harness checkout; a
 `<product>/<repo>` argument narrows to one repo directory.
 

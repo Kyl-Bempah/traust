@@ -1,55 +1,59 @@
 # Components — the repositories this harness is built from
 
-The harness is **not one repository**. It is a stack of five independently
-versioned components plus three data repositories. This page is the
-authoritative map: what each component owns, which way the dependencies point,
-how versions are pinned, and — the question that actually comes up — **which
-repo do I change to fix this?**
+The harness is **not one repository**. Its ecosystem includes six code components
+plus three data repositories. This page maps current ownership and dependencies,
+the migration toward shared core services, how commits are pinned, and **which
+repo to change for a given fix**.
 
 If you only want to install and run, [setup.md](setup.md) is enough.
 Read this before changing a schema, an enum, the fingerprint recipe, or
-anything under `traust_engine` / `traust_ledger`.
+anything under `traust_engine`, `traust_ledger`, or `traust_core`.
 
 ---
 
 ## 1. The stack
 
-```
-                    traust-sdk (Go)  ─────┐
-                                               │  both import the contracts;
-  traust   skills, slash commands │  neither imports the other
-        │               agent-facing CLIs      │
-        ▼                                      │
-  traust-engine        scanners, corpus,      │
-        │               metrics, reporting,    │
-        │               ledger gateway         │
-        ▼                                      │
-  traust-ledger           identity, integrity,   │
-        │               signing, ledger service│
-        ▼                                      ▼
-  traust-contracts schemas · enums · shared models    (leaf — depends on nothing internal)
-```
+| Component | Lang | Responsibility |
+|---|---|---|
+| `traust` | Python | Security skills (`harnessing/`), prompts, slash commands, agent-facing CLIs (`src/traust/`), workflow policy, docs, and gates |
+| [traust-core](https://github.com/traust-security/traust-core) | Python | Shared platform API under `traust_core.v1`: domain models, repositories, services, artifact publishing, configuration/context, rendering, and provider interfaces; adoption in progress |
+| `traust-engine` | Python | Existing deterministic processing: scanner adapters, corpus and portfolio processing, metrics, reporting (including SARIF), validation, compliance, toolchain integration, and the ledger gateway |
+| `traust-ledger` | Python | Finding identity, event history, Merkle integrity, signing, verification, and the current client, CLI, and REST service entry points |
+| `traust-contracts` | Python/data | Canonical artifact/config schemas, controlled vocabularies, shared bindings, and database DDL |
+| `traust-sdk` | Go | Typed access to contracts, storage, ledger integration, and skill execution for non-Python consumers |
 
-Dependencies point **one way, downward**. `traust-contracts` is the leaf and
-imports nothing from the others. The harness declares two direct dependencies,
-`traust-engine` and `traust-contracts`; `traust-ledger` is traust-engine's
-dependency, and harness code reaches it only through the engine's ledger gateway
-(`traust_engine.ledger`), never by importing `traust_ledger` itself. There are no
-cycles, and adding one would be a design defect — the whole point of the split is
-that the vocabulary can be released without releasing the skills.
+### Current dependencies
 
-| Component | Lang | Owns | Why it is its own repo |
-|---|---|---|---|
-| `traust` | Python | Skills (`harnessing/`), slash commands, agent-facing CLIs (`src/traust/`), docs, gates | The agent-facing surface. Changes constantly; must not force a release of the vocabulary underneath it |
-| `traust-engine` | Python | `adapters` (scanner wrappers), `corpus`, `portfolio`, `metrics`, `reporting` (incl. SARIF), `validation`, `compliance`, `impact`, `registry`, `sweep`, `toolchain`, `data`, `ledger` (the gateway — the one place the engine touches traust-ledger), `_util` (safe_exec, escaping, redaction) | Deterministic machinery with no prompt content — testable and reusable without an agent |
-| `traust-ledger` | Python | The ledger kernel and its service: `_internal/` (the fingerprint recipe `identity.py`, `writer.py`, `events`, `integrity/` — RFC 9162 Merkle, stamping, signing — `reports`), and three OIDC-gated entry points over shared `handlers` — `client.py` (in-process SDK), `cli`, and `service/` (REST app, auth, identity providers) with pluggable `backends` | The trust root. Isolated so its blast radius is small and its test surface is exhaustive |
-| `traust-contracts` | Python | `schemas/v1/*.json`, `enums/v1/*.json` with the matching `StrEnum`s in `enums.py`, `models.py`, `paths.py` | The shared vocabulary. Every producer and consumer — including non-Python ones — must agree on it |
-| `traust-sdk` | Go | Typed SDK for invoking harness skills with pluggable execution backends (`go/v1/`: `skills`, `types`, `enums`, `ingest`, `query`, `validate`) | Lets non-Python consumers (a platform service, for example) drive the harness and read its artifacts without reimplementing the contracts |
+The harness declares direct dependencies on `traust-engine`, `traust-ledger`,
+and `traust-contracts`. Engine also depends on ledger and contracts; ledger
+depends on contracts. The direct ledger dependency covers existing harness
+imports that have not moved behind the engine's ledger gateway.
 
-**`traust-sdk` is not a dependency of the harness.** It is a *sibling
-consumer* — it depends on the contracts and calls the harness, not the reverse.
-Nothing in this repository imports it. It is listed here because it is part of
-the stack and because a contracts change can break it.
+Core is a separate package that pins contracts. The harness, engine, and ledger
+do **not yet declare a dependency on core**. Their installed behavior is defined
+by their manifests and lockfiles, not by the presence of a sibling core checkout.
+
+**`traust-sdk` is not a dependency of the harness.** It is a sibling consumer:
+its generator pins contracts, and its APIs integrate with storage, the ledger,
+and skill execution. Nothing in this repository imports it.
+
+### Core migration boundary
+
+Contracts defines the canonical data shapes and database structure. Core
+provides typed access, persistence, and shared platform behavior over those
+contracts. The intended direction is for engine execution and CLI adapters to
+call shared core services while security workflow policy remains in `traust`.
+This is a migration direction, not the current dependency graph.
+
+Core's repositories are implemented, but its domain services are mostly stubs.
+Consult the core [implementation status](https://github.com/traust-security/traust-core#domain-services-stubs)
+before moving a caller; existing functionality remains with its current owner
+until a working replacement and its callers land together. Do not create a
+second implementation in the harness while migrating shared behavior.
+
+The intended core REST API route for the Go SDK and other non-Python consumers
+is planned, not an available integration. It is distinct from the existing
+traust-ledger REST service.
 
 ### Data repositories (not components)
 
@@ -75,134 +79,115 @@ not from this repo.
 
 | I want to… | Repo | Note |
 |---|---|---|
-| Add or edit a skill, prompt, or slash command | `traust` | No release chain needed |
-| Add a field to a report/layer schema | `traust-contracts` | Then release up the chain (§4) |
-| Add an enum value | `traust-contracts` | **Three surfaces**: `schemas/v1/*.json`, `enums/v1/<name>.json`, and the `StrEnum` in `enums.py`. Missing one silently half-lands the value |
-| Change the finding fingerprint | `traust-ledger` (`_internal/identity.py`) | **One implementation only.** Move `ALGO_VERSION` and update the fixtures in `traust-ledger/tests/fixtures/` — §5 |
-| Change Merkle/stamping/signing behaviour | `traust-ledger` (`integrity/`) | See [signing.md](signing.md) |
-| Add or fix a scanner adapter | `traust-engine` (`adapters/`) | Return shape is gated by `schemas/v1/adapter-result.schema.json` |
-| Change dashboards, SARIF export, corpus resolution | `traust-engine` | `metrics/`, `reporting/`, `corpus/` |
-| Change what a Go consumer sees | `traust-sdk` | And the contracts, if the vocabulary itself changed |
+| Add or edit a skill, prompt, slash command, or security workflow policy | `traust` | Keep shared domain behavior out of pack policy |
+| Change shared platform models, persistence, providers, or core services | `traust-core` | Check implementation status and migrate callers with working replacements |
+| Add a field to an artifact schema | `traust-contracts` | Update affected producers and consumers before advancing their pins (§4) |
+| Add an enum value | `traust-contracts` | Update canonical definitions and bindings using that repo's checks |
+| Change the database structure | `traust-contracts` | Coordinate core repositories and existing SQL consumers with the selected DDL revision |
+| Change the current finding fingerprint | `traust-ledger` (`_internal/identity.py`) | One implementation only; update `ALGO_VERSION` and its regression fixtures (§5) |
+| Change Merkle/stamping/signing behavior | `traust-ledger` (`integrity/`) | See [signing.md](signing.md) |
+| Add or fix an existing scanner adapter | `traust-engine` (`adapters/`) | Adapter results must satisfy the installed contracts schema |
+| Change existing dashboards, SARIF export, or corpus resolution | `traust-engine` | Current modules remain authoritative until their core-backed replacements land |
+| Change what a Go consumer sees | `traust-sdk` | Also update contracts when the data shape changes; do not assume the planned core REST route exists |
 
 ---
 
 ## 3. Version pinning
 
-Each component carries its own `VERSION` + `pyproject.toml` version and its own
-git tags. Consumers pin **by git tag** in `[tool.uv.sources]`, with a matching
-floor in `dependencies`. The harness pins its two direct dependencies (shape
-only — the live values are in `pyproject.toml`, which is the only place they
-belong):
+Python consumers select git commits with `rev` in `[tool.uv.sources]`.
+`dependencies` carries bare package names; the commit pin selects the code,
+and `uv.lock` records the resolved dependency set. Do not copy live pins into
+documentation. The harness declares these three code dependencies:
 
 ```toml
 dependencies = [
-    "traust-engine>=X.Y.Z",
-    "traust-contracts>=A.B.C,<A+1",
+    "traust-engine",
+    "traust-ledger",
+    "traust-contracts",
 ]
 
 [tool.uv.sources]
-traust-engine        = { git = "<forge>/traust-engine.git",        tag = "vX.Y.Z" }
-traust-contracts = { git = "<forge>/traust-contracts.git", tag = "vA.B.C" }
+traust-engine = { git = "<forge>/traust-engine.git", rev = "<commit-sha>" }
+traust-ledger = { git = "<forge>/traust-ledger.git", rev = "<commit-sha>" }
+traust-contracts = { git = "<forge>/traust-contracts.git", rev = "<commit-sha>" }
 ```
 
-`traust-engine` in turn pins `traust-ledger` and the contracts the same way, and
-`traust-ledger` pins the contracts.
+Engine and ledger carry their own sources. Core separately pins contracts and
+documents commit-based consumption rather than release tags. Adding a core
+checkout beside the harness does not add it to the installed dependency graph.
 
-### The failure mode to know
+### Source conflicts and compatibility
 
-`uv` resolves each git dependency to exactly one URL-plus-tag. If the harness
-pins one contracts tag while the `traust-engine` tag it depends on pins
-an older one, `uv lock` fails with **"conflicting URLs"** — not a version
-conflict message, a URL one, which is why it reads as a tooling bug the first
-time you hit it. The fix is always the same: make the transitive pins agree,
-which in practice means releasing the intermediate component so its pin catches
-up. Both `traust-engine` and `traust-ledger` pin the contracts themselves, so a
-contracts bump is a three-repo operation, not a one-line edit here; a
-`traust-ledger` bump is a two-repo operation (traust-ledger, then traust-engine)
-and reaches the harness when it re-pins the engine.
+Inconsistent Git URLs or revision specifications for the same dependency can
+make `uv lock` report **"conflicting URLs"**. Inspect the root project's source
+overrides and the selected components' manifests, align the intended sources,
+and update intermediate consumers when their implementation requires it.
 
-**Installed-vs-pinned drift** is caught by the `dependency-pins:*` items in
-`/check-drift` — an absent or wrong-version sibling package is reported as
-drift, fixed with `uv sync`. That check exists because CI cannot cover this
-class: CI builds its own venv, while skills run on the operator's workstation
-against whatever is installed there.
+A successful resolution is not proof of runtime compatibility. Schema layouts,
+DDL, and APIs can change between commits; exercise affected consumers before
+advancing pins. Adopting core requires working caller migrations, not merely
+adding a package or changing the contracts revision.
 
-### Reading the current pins
-
-This page carries no version table — it would be stale within a week. Ask the
-tree:
-
-```bash
-grep -E 'tag = ' pyproject.toml                 # what the harness pins
-grep -E 'tag = ' ../traust-engine/pyproject.toml   # what the engine pins (incl. traust-ledger)
-for r in traust-engine traust-ledger traust-contracts; do
-  printf '%-24s %s\n' "$r" "$(git -C ../$r tag --sort=-v:refname | head -1)"
-done                                            # latest tag that exists in each checkout
-```
+`/check-drift` reports installed dependency drift; `uv sync` restores the
+dependency set selected by this project's manifest and lockfile. Read the
+current sources in `pyproject.toml` and resolved commits in `uv.lock`; a sibling
+checkout or its latest tag is not the installed version.
 
 ---
 
 ## 4. Release order
 
-Downward dependencies mean releases go **bottom-up**, and a change to the
-vocabulary is the expensive case: it touches four repos. A traust-ledger change
-stops at traust-engine unless the harness needs the new engine.
+Update providers before their consumers, following the actual dependency graph
+rather than a fixed release chain:
 
-```
-contracts ──▶ traust-ledger ──▶ traust-engine ──▶ harness
-                                              └▶ traust-sdk (if the vocabulary changed)
-```
+- Existing Python path: contracts changes may require ledger and engine changes
+  before the harness can adopt them. The harness also pins all three directly.
+- Core path: contracts changes may require core repository and service changes.
+  The current harness does not pick these up until a caller migration adds core.
+- Go path: regenerate SDK bindings and storage code against its selected
+  contracts commit when those contracts change.
 
-The three Python packages share release mechanics — each has a `Makefile` and a
-`release.py`:
+For an affected Python component:
 
-```bash
-make test                      # gates + suite
-make check-release             # ci/gates.py mr, against origin/main
-make bump patch|minor|major    # writes VERSION + pyproject.toml
-git push --follow-tags
-```
+1. Implement and test the change in the owning repository.
+2. Merge it, then update each affected consumer's `rev` to the tested commit.
+3. Run `uv lock` and `uv sync`, exercise the affected runtime path, and run that
+   consumer's checks before merging its pin update.
+4. Continue outward until every affected consumer has been updated.
 
-Then in each **consumer**, bump both the `dependencies` floor and the
-`[tool.uv.sources]` tag, run `uv lock && uv sync`, and release that repo in
-turn. Skipping the floor while bumping the tag is the usual slip: it installs
-correctly but stops expressing the real minimum.
+Follow each repository's own release instructions; no tagged release is
+required merely to select a merged dependency commit. This dependency workflow
+does not change the harness's `VERSION`/semantic-version convention or the Go
+SDK's per-language release tags. Core's evolving `traust_core.v1` namespace is
+an API boundary, not a package release number or a promise that all services
+are implemented.
 
-Two components differ:
-
-- **`traust`** has no `Makefile` and no `release.py`. Edit `VERSION`
-  by hand per the bump rules in [AGENTS.md](../AGENTS.md), then
-  `git tag v$(cat VERSION)`. Nothing depends on it, so it is always last.
-- **`traust-sdk`** is versioned **per language**, not per repo: `go/VERSION`
-  with tags prefixed from `ci/languages.json` — `go/v0.5.2`, not `v0.5.2`. Adding
-  a second language adds its own VERSION and tag series.
-
-> The per-repo `release.py` docstring points at a `tools/release.py` "in the
-> mono-checkout" for workspace-wide stack releases. **No such tool exists in
-> this workspace** — release each repo individually.
+Do not change dependency pins as part of a documentation-only core introduction.
+Core adoption must also migrate callers, configuration, and persistence where
+needed; its planned REST API is not a substitute for an implemented integration.
 
 ---
 
 ## 5. What crosses the boundary
 
-Two things are shared contracts in the strong sense: change them and every
-consumer, in any language, is affected.
+Contracts defines the shared data. The selected revision determines the
+physical schema and DDL layout; paths from another revision are not an API.
 
 | Contract | Defined in | Consumed by |
 |---|---|---|
-| **Report / layer / adapter schemas** | `schemas/v1/` (contracts) | validated in `traust_engine` via `config.SCHEMA_DIR`; typed in `traust-sdk` `go/v1/types` + `validate` |
-| **Enums** (16) | `enums/v1/*.json` + `src/traust_contracts/enums.py` | everything, incl. `traust-sdk` `go/v1/enums` |
+| **Artifact and config schemas** | Installed `traust-contracts` schema resources | Existing Python validators, core's contracts reader, and generated SDK types/validators |
+| **Enums** | Contracts' canonical enum registry and bindings | Python components and generated SDK enums |
+| **Database DDL** | Contracts' authored SQL for its selected data model | Core repositories and existing SQL consumers compatible with that revision |
 
-Adding an enum value means touching **three surfaces** — the JSON Schema that
-constrains the field, `enums/v1/<name>.json`, and the `StrEnum` in `enums.py`.
-Land two of the three and the value half-exists: accepted in one path,
-rejected in another.
+Update canonical definitions and regenerate or update bindings according to the
+contracts repository's checks. Core supplies access and behavior; neither core
+nor the harness should create a second source of truth for schemas or DDL.
 
 ### Finding identity is deliberately *not* a cross-boundary contract
 
-**Only the harness computes identity.** No consumer and no non-harness producer
-implements the fingerprint; a producer that mints findings routes through the
-harness or submits unstamped. The recipe lives in exactly one place —
+**The current finding-identity recipe is owned by traust-ledger.** No consumer
+or non-harness producer should implement a second fingerprint recipe; route
+through the existing ledger implementation or submit unstamped. The recipe lives in
 `traust_ledger/_internal/identity.py`, contract in
 `traust-ledger/docs/finding-identity.md` — and its regression net sits beside it
 in `traust-ledger/tests/fixtures/` (`identity-recipe-vectors.json`,
@@ -222,6 +207,7 @@ every dedupe, alias and metric downstream.
 ## See also
 
 - [setup.md](setup.md) — cloning the workspace and `uv sync`
+- [traust-core](https://github.com/traust-security/traust-core) — platform API, implementation status, and core-specific development instructions
 - [architecture.md](architecture.md) — code internals within a component
 - [disposition-ledger.md](disposition-ledger.md) — what `traust-ledger` is protecting
 - [signing.md](signing.md) — ledger signing

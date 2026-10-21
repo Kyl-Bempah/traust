@@ -22,6 +22,7 @@ allowed-tools:
   - Bash(mktemp:*)
   - Bash(python3 *traust* -m traust_engine.adapters.checkov:*)
   - Bash(python3 *traust* -m traust_engine.adapters.yara:*)
+  - Bash(python3 *traust* -m traust.cli adapters osv:*)
   - Bash(python3 *traust* -m traust.cli reporting validate:*)
   - Bash(python3 *traust* -m traust_engine.reporting.render:*)
   - Bash(python3 *traust* -m traust.cli corpus finding-identity:*)
@@ -174,8 +175,16 @@ The wrapper runs the `yara` engine against an **explicitly pinned rule pack** �
 ## Phase 2 — SBOM (syft)
 
 ```bash
-syft <ref> -o cyclonedx-json=/tmp/<name>-sbom.cdx.json
+syft <ref> -o syft-json=/tmp/<name>-sbom.syft.json -o cyclonedx-json=/tmp/<name>-sbom.cdx.json
 ```
+
+One run, two files. **The syft JSON drives Phase 3**: it records which
+OS package installed each file (`ownership-by-file-overlap`), and
+CycloneDX drops that. Without it grype matches upstream advisories
+against language packages an RPM installed. On `ubi9/python-311` (measured
+2026-10-20) that added 31 matches, 13 of them High: urllib3, pip,
+requests and setuptools under `/usr/lib/python3.*`, all carrying Red Hat
+backports. **The CycloneDX file is for the graph**:
 
 **Persist the SBOM for the portfolio graph**: copy it to
 `analysis-results/graph/sboms/<shortdigest>.cdx.json` (first 7+ hex chars
@@ -199,7 +208,8 @@ any privileged entrypoint binary), switch to the assertive posture:
 inspect those binaries directly (strings/linked-library/version
 probing, upstream digest comparison against the declared source repo),
 report plausible unpatched-component findings with what-would-confirm
-named, record `metadata.additional.assertive_inference: {"trigger":
+named — "plausible unpatched" rests on a version the probing found plus
+an advisory a tool or feed supplied, never a CVE recalled from memory, record `metadata.additional.assertive_inference: {"trigger":
 "sbom attribution gap", "unattributed_share": "<estimate>"}`, and state
 the gap in `negative_results`. Expected extra false positives are
 absorbed by triage — an unattributed vulnerable binary silently passing
@@ -214,13 +224,51 @@ Flag as findings:
 ## Phase 3 — Known CVEs (grype)
 
 ```bash
-grype sbom:/tmp/<name>-sbom.cdx.json -o json > /tmp/<name>-grype.json
+grype sbom:/tmp/<name>-sbom.syft.json -o json > /tmp/<name>-grype.json
 grype db status    # record the DB build date
+python3 -m traust.cli adapters osv --sbom /tmp/<name>-sbom.syft.json \
+  --grype /tmp/<name>-grype.json --out /tmp/<name>-osv.json
 ```
+
+**grype is the primary scanner**: OS packages, with the distribution's
+own data (RHSA for RPMs), and binaries matched by CPE (a bundled `node`
+runtime, for example). **The OSV step adds language-package advisories
+grype's database lacks** (owner decision 2026-10-20). It looks up only
+language packages no OS package installed (npm, PyPI, Maven, Go modules
+including the Go standard library, Cargo, RubyGems, NuGet), so a Red Hat
+RPM's backported fixes are never second-guessed by an upstream version.
+Each candidate it shares with grype is tagged `also_in_grype: true`.
+
+- **`grype_os_installed` lists grype's own matches on language packages
+  an OS package installed** (grype applies file ownership only partly,
+  even on syft JSON: on `ubi9/python-311`, 26 of 32 such matches, including
+  npm's bundled `tar` at critical, owned by the nodejs RPM). Record them
+  in `dependency_audit` as `installed by <owner>`, with the upstream id
+  and the owner's advisory state from grype's RPM matches. **Never
+  promote one on the upstream advisory alone.** A finding needs the
+  owning package's own advisory (for example an RHSA for the nodejs RPM)
+  showing the installed build is affected.
+- **Use only `also_in_grype: false` candidates** as new `dependency_audit`
+  entries (the rest are grype's matches seen twice). Their notes say
+  `source: OSV`, with the OSV id, aliases and `severity_basis` (an
+  `unscored` advisory is banded medium by the harness rule; say so).
+- **Read `metadata.status`**, as in `/secure-code-audit`'s *Deterministic
+  dependency pre-scan*: exit 3 `degraded`, or exit 2 `failed` (API
+  unreachable; or, air-gapped, osv-scanner or its database missing).
+  Record `"osv-scanner": "degraded: <counts>"` / `"failed: <failure.status>"`
+  in `deterministic_steps`, plus a `coverage_gaps` entry (`{"tool":
+  "osv-scanner", "system": "image language packages", "reason": ...}`).
+  The unanswered packages are not clean. Otherwise record
+  `"osv-scanner": "ran"`.
+- Record `skipped_os_installed` (the language packages left to grype) in
+  `metadata.additional.sbom_packages`.
+- Air-gapped deployments (`access: air-gapped` on the `osv` source in
+  `feeds.yaml`) run the same command; osv-scanner offline reads the
+  filtered packages.
 
 - **Every match** becomes a `dependency_audit` entry: `package`, `version`, `status` (`vulnerable`/`fix-available`/`wont-fix` per upstream data), `notes` with the CVE/GHSA ID and fixed-in version. Negligible-severity or no-fix matches may be summarized in `dependency_audit.prose`.
 - **Promote to a finding** only matches that are plausibly exploitable in this image's role: the vulnerable binary/library actually ships and is executed or network-reachable (a CVE in an unused `dnf` plugin in a distroless-adjacent image is `dependency_audit`-only). **Every promotion to critical/high must additionally pass the Precision Gate below** — its dependency and advisory gate is this skill's measured FP path. Category `supply-chain`, cite K07 for operator images, carry the CVE's CVSS vector, and set `validation_status: not_verified` — a version match is not execution evidence.
-- **Respect Red Hat security data**: for RPM packages grype consumes RHSA data — report the RHSA severity/fix state rather than second-guessing NVD when they disagree, and say so in `notes`.
+- **Respect Red Hat security data**: for RPM packages grype consumes RHSA data — report the RHSA severity/fix state rather than second-guessing NVD when they disagree, and say so in `notes`. The same holds for a language package an RPM installed: its fixes arrive in the RPM, so an upstream GHSA/CVE match against it is not evidence; check the owning RPM's RHSA state instead.
 - **Consult portfolio impact artifacts**: when `analysis-results/impact/<cve>-impact-analysis.json` exists (from `/impact-analysis`) and covers this image's source repo, cite its classification as promotion/dismissal context — `affected` at symbol level strengthens promotion; `not_observed` at symbol level is documented dismissal evidence; manifest-level classifications inform but never decide. Record the artifact path in the finding's evidence.
 - Never mark CVE matches `confirmed` from scanner output alone; the fuzzing/validation stages own that transition.
 
@@ -511,7 +559,7 @@ Key profile obligations for this skill:
 - `metadata.repository` = digest-pinned image reference; tag, source labels, base image, and platform digests under `metadata.additional`.
 - `metadata.commit` = manifest digest hex (64 chars, no `sha256:` prefix).
 - **No `metadata.ref` / `metadata.ref_kind`**: the audited artifact is an image digest, not a git checkout — stamping the declared-source branch here would fabricate checkout provenance. The `vcs-ref`/branch drift data stays under `metadata.additional` (Phase 5).
-- `metadata.tools` = skopeo/syft/grype versions **plus the grype DB build date**.
+- `metadata.tools` = skopeo/syft/grype versions **plus the grype DB build date**, and the OSV step (`traust adapters osv` with its `source`: `osv-api`, or the osv-scanner version when air-gapped).
 - `locations[].path` = package URL (`pkg:golang/…`) or image pseudo-path (`oci-config:User`, `layer:<sha256:…>`).
 - `dependency_audit` populated from Phase 3; findings only for reachable/shipping vulnerabilities.
 - `peach_isolation_review` always emitted — normally `{"applicable": false, "rationale": …}` pointing at the source repo's code-profile report.

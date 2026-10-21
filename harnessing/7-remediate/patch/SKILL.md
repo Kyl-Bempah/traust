@@ -64,7 +64,7 @@ instead — `/patch` is the lightweight, offline counterpart.)
 **Paths:** `<skill-base>` is this skill's base directory (injected by the
 runtime as "Base directory for this skill"; it is
 `traust/harnessing/7-remediate/patch`). `<harness>` is the
-traust repo root, i.e. `<skill-base>/../..`; checkpoint I/O
+traust repo root, i.e. `<skill-base>/../../..`; checkpoint I/O
 uses `python3 -m traust.cli admin checkpoint`. Resolve both to absolute
 paths once at startup.
 

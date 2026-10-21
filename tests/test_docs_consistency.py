@@ -29,68 +29,6 @@ class TestDocConsistency(unittest.TestCase):
         failures = C.dead_backtick_failures()
         self.assertEqual(failures, [], "\n" + "\n".join(failures))
 
-    def test_group_readme_matches_when_checked_out(self):
-        failures = C.group_readme_failures()
-        if not C._group_readme(C.REPO).is_file():
-            self.skipTest("gitlab-profile sibling not checked out")
-        self.assertEqual(failures, [], "\n" + "\n".join(failures))
-
-
-class TestGroupReadmeCheck(unittest.TestCase):
-    """Unit-test the group-README drift detection against a fake workspace."""
-
-    def _workspace(self, tmp, readme_text):
-        repo = Path(tmp) / "traust"
-        for skill in ("alpha", "beta"):
-            d = repo / "harnessing" / skill
-            d.mkdir(parents=True)
-            (d / "SKILL.md").write_text("x")
-        cmds = repo / ".claude" / "commands"
-        cmds.mkdir(parents=True)
-        for c in ("alpha", "beta", "gamma"):
-            (cmds / f"{c}.md").write_text("x")
-        (repo / "scripts").mkdir()
-        (repo / "PROCESS.md").write_text("## Stage 1\n")
-        (repo / "VERSION").write_text("1.2.3\n")
-        sibling = Path(tmp) / "gitlab-profile"
-        sibling.mkdir()
-        (sibling / "README.md").write_text(readme_text)
-        return repo
-
-    def test_consistent_claims_pass(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = self._workspace(
-                tmp,
-                "**Harness version:** v1.2.3\n"
-                "Agent harness — 2 skills, 3 commands\n"
-                "All **2 skills** · **3** slash-command wrappers\n"
-                "**Skills (2), by function:**\n"
-                "the methodology lives (harness **v1.2.3**).\n"
-                "OWASP ASVS v5.0 and SLSA v1.2 are unrelated versions.\n",
-            )
-            self.assertEqual(C.group_readme_failures(repo), [])
-
-    def test_stale_version_flagged(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = self._workspace(tmp, "**Harness version:** v0.9.9\n")
-            failures = C.group_readme_failures(repo)
-            self.assertTrue(any("v0.9.9" in f and "1.2.3" in f for f in failures))
-
-    def test_stale_counts_flagged(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = self._workspace(
-                tmp, "harness — 7 skills, 9 commands · **Skills (7), by function:**\n"
-            )
-            failures = C.group_readme_failures(repo)
-            self.assertTrue(any("7 skills" in f for f in failures))
-            self.assertTrue(any("9 commands" in f for f in failures))
-
-    def test_missing_sibling_skipped(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = self._workspace(tmp, "irrelevant")
-            (Path(tmp) / "gitlab-profile" / "README.md").unlink()
-            self.assertEqual(C.group_readme_failures(repo), [])
-
 
 class TestCliExampleFlags(unittest.TestCase):
     def test_live_tree_clean(self):

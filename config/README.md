@@ -7,7 +7,7 @@ The harness reads two kinds of configuration and keeps them apart on purpose.
 | File | Why it is safe to publish |
 |---|---|
 | `external-tools.yaml` | Pinned versions of the open-source scanner binaries the harness runs. Optional per-deployment engines are deliberately **absent** — the file's own header lists them and says where each is watched instead |
-| `feeds.yaml` | Public vulnerability-feed endpoints (OSV, NVD, vendor CSAF/VEX) and their fetch policy |
+| `feeds.yaml` | Public vulnerability-feed endpoints (OSV, NVD, vendor CSAF/VEX) and their fetch policy. The `osv` source's `access` is `api` (default) or `air-gapped` (adopter-provided osv-scanner + offline database; see docs/setup.md). The `deps_dev` source (resolution of manifests without a lockfile; Google APIs ToS, CC BY 4.0 data) is on by default; `access: disabled` opts out |
 | `model-registry.yaml` | Model tier classes and routing roles; no estate data. Adopters repoint roles to their own providers/models by editing the copy in `TRAUST_CONFIG_HOME` — per role, schema-gated ([procedure](../docs/model-classes.md#configuring-your-own-models)) |
 
 All three are *shipped defaults that are also seeded*: `install_traust` copies
@@ -49,6 +49,15 @@ ships a template for each such file:
 | `export.example.yaml` | `export.yaml` | the one-shot public export (public forge URL, private URLs to rewrite, build plumbing to strip, CHANGELOG cut) |
 | `internal-vocabulary.example.yaml` | `internal-vocabulary.yaml` | `scan_internal_refs` |
 | `ledger-signing-key.example.pub` | `ledger-signing-key.pub` | `traust_engine.reporting.validate`, `/drift-watch` signature check |
+| `sla-policy.example.yaml` | `sla-policy.yaml` | `traust_engine.metrics` (`/sla-view` default policy), `/drift-watch` provenance |
+| `org-parameters.example.yaml` | `org-parameters.yaml` | `/compliance-check` (organization-defined parameter values), `/drift-watch` provenance |
+| `adr-registry.example.yaml` | `adr-registry.yaml` | `traust ops index-adrs`, `/drift-watch` pin check |
+| `reachability-watch.example.yaml` | `reachability-watch.yaml` | `/drift-watch` (`reachability-watch:review`) |
+| `benchmark-targets.example.yaml` | `benchmark-targets.yaml` | `/recall-benchmark` (the answer key; canary and seeded sources sit beside it in `recall-benchmark/`) |
+
+The compliance scope registry, `compliance-scope.yaml`, also lives in the
+config home. It has no template: the scope intake (`/compliance-check`
+interview) writes it from the system owner's own declaration.
 
 ### How the harness finds the deployment directory
 
