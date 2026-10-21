@@ -3,6 +3,7 @@
 import datetime
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -34,8 +35,25 @@ def _mk_ws(tmp_path):
     (ws / "analysis-results" / "graph").mkdir(parents=True)
     (ws / "analysis-results" / "findings").mkdir(parents=True)
     (ws / "progress-tracker" / "metrics").mkdir(parents=True)
-    (ws / "progress-tracker" / "configs" / "compliance").mkdir(parents=True)
     return ws
+
+
+@pytest.fixture(autouse=True)
+def _private_config_home(tmp_path, monkeypatch):
+    """Each test gets its own copy of the suite's config home.
+
+    Deployment config (adr-registry, sla-policy, org-parameters, the
+    reachability watch register) is read from the config home, so a test that
+    seeds one must not leak it into the shared suite home.
+    """
+    home = tmp_path / "config-home"
+    shutil.copytree(os.environ["TRAUST_CONFIG_HOME"], home)
+    monkeypatch.setenv("TRAUST_CONFIG_HOME", str(home))
+    return home
+
+
+def _home() -> Path:
+    return Path(os.environ["TRAUST_CONFIG_HOME"])
 
 
 def _engine_for_ws(tmp_path, ws, monkeypatch):
@@ -291,7 +309,7 @@ def test_repo_graph_stale_when_inputs_move(tmp_path):
 def test_adr_registry_pending_then_checked(tmp_path, monkeypatch):
     ws = _mk_ws(tmp_path)
     assert cd.check_adr_registry(ws)[0]["status"] == "pending"
-    (ws / "progress-tracker/configs/compliance/adr-registry.yaml").write_text(
+    (_home() / "adr-registry.yaml").write_text(
         "registers:\n  - {name: arch, repo: https://x/y.git, pin: aaaa1111}\n"
     )
     monkeypatch.setattr(
@@ -309,9 +327,7 @@ def test_adr_registry_pending_then_checked(tmp_path, monkeypatch):
 def test_provenance_review_due(tmp_path):
     pytest.importorskip("yaml")
     ws = _mk_ws(tmp_path)
-    (ws / "progress-tracker/configs/sla-policy.yaml").write_text(
-        "source: {retrieved: '2020-01-01'}\n"
-    )
+    (_home() / "sla-policy.yaml").write_text("source: {retrieved: '2020-01-01'}\n")
     items = {i["item"]: i for i in cd.check_policy_provenance(ws)}
     assert items["provenance:sla-policy"]["status"] == "review_due"
 
@@ -417,7 +433,9 @@ def test_ref_provenance_live_tree_zero_disagreements():
 
 def test_framework_upstream_pin_check(tmp_path, monkeypatch):
     ws = _mk_ws(tmp_path)
-    comp = ws / "progress-tracker/configs/compliance"
+    comp = tmp_path / "compliance-data"
+    comp.mkdir()
+    monkeypatch.setattr(cd, "_compliance_data", lambda: comp)
     assert cd.check_framework_upstream(ws)[0]["status"] == "pending"
     (comp / "provenance.json").write_text(
         json.dumps({"upstream": "https://x/y", "upstream_head": "aaaa1111"})
@@ -433,10 +451,12 @@ def test_framework_upstream_pin_check(tmp_path, monkeypatch):
     assert cd.check_framework_upstream(ws)[0]["status"] == "fresh"
 
 
-def test_catalog_reviewed_dates_covered(tmp_path):
+def test_catalog_reviewed_dates_covered(tmp_path, monkeypatch):
     pytest.importorskip("yaml")
     ws = _mk_ws(tmp_path)
-    comp = ws / "progress-tracker/configs/compliance"
+    comp = tmp_path / "compliance-data"
+    comp.mkdir()
+    monkeypatch.setattr(cd, "_compliance_data", lambda: comp)
     (comp / "catalog-pci-dss-v4.yaml").write_text("reviewed: '2020-01-01'\nframework: pci-dss-v4\n")
     items = {i["item"]: i for i in cd.check_policy_provenance(ws)}
     assert items["provenance:catalog-pci-dss"]["status"] == "review_due"
@@ -605,7 +625,13 @@ def test_rescan_worklist_unparseable_is_unavailable(tmp_path):
 
 
 def _patch_tools(
-    monkeypatch, *, which=True, local="1.0.0", upstream=("1.0.0", None), expected=None
+    monkeypatch,
+    *,
+    which=True,
+    local="1.0.0",
+    upstream=("1.0.0", None),
+    expected=None,
+    adopter=False,
 ):
     monkeypatch.setattr(
         cd,
@@ -618,6 +644,7 @@ def _patch_tools(
                 "ref": "example/fakescan",
                 "version_re": cd._SEMVER_RE,
                 "expected": expected,
+                "adopter": adopter,
             }
         ],
     )
@@ -633,6 +660,35 @@ def test_external_tools_missing_is_pending(tmp_path, monkeypatch):
     items = cd.check_external_tools(_mk_ws(tmp_path))
     assert items[0]["item"] == "external-tools:fakescan"
     assert items[0]["status"] == "pending"
+
+
+def test_an_absent_adopter_tool_is_not_pending_and_its_pin_is_checked(tmp_path, monkeypatch):
+    _patch_tools(monkeypatch, which=False, adopter=True, expected="2.7.0", upstream=("2.7.0", None))
+    row = cd.check_external_tools(_mk_ws(tmp_path))[0]
+    assert row["status"] == "fresh"
+    assert "adopter-provided" in row["detail"]
+
+
+def test_an_adopter_tool_pin_behind_upstream_is_stale(tmp_path, monkeypatch):
+    old = cd._now() - datetime.timedelta(days=cd.EXTERNAL_TOOL_LAG_GRACE_DAYS + 10)
+    _patch_tools(monkeypatch, which=False, adopter=True, expected="2.4.0", upstream=("2.7.0", old))
+    row = cd.check_external_tools(_mk_ws(tmp_path))[0]
+    assert row["status"] == "stale"
+    assert "advance `expected`" in row["refresh"]
+
+
+def test_an_installed_adopter_tool_is_checked_like_any_other(tmp_path, monkeypatch):
+    _patch_tools(monkeypatch, adopter=True, local="2.4.0", expected="2.7.0")
+    assert cd.check_external_tools(_mk_ws(tmp_path))[0]["status"] == "drift"
+
+
+def test_the_shipped_osv_scanner_row_is_adopter_provided_and_in_no_profile():
+    import yaml
+
+    rows = yaml.safe_load((cd.HARNESS_ROOT / "config" / "external-tools.yaml").read_text())
+    osv = next(t for t in rows["tools"] if t["name"] == "osv-scanner")
+    assert osv["provided_by"] == "adopter"
+    assert osv["consumers"] == []
 
 
 def test_external_tools_current_is_fresh(tmp_path, monkeypatch):
@@ -1083,7 +1139,7 @@ def _seed_lang_cache(ws, rows):
 
 
 def _seed_watch(ws, reviewed, cadence=92, n=2):
-    p = ws / cd.REACHABILITY_WATCH_REL
+    p = _home() / cd.REACHABILITY_WATCH
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
         f'reviewed: "{reviewed}"\nreview_cadence_days: {cadence}\n'
@@ -1104,7 +1160,7 @@ def test_reachability_coverage_flags_uncovered_high_mass_language(tmp_path):
     assert "reachability-coverage:Go" not in items
     assert f"dominant in {n} repos" in items["reachability-coverage:Python"]["detail"]
     # the row must point at the watch register for the accept-decision path
-    assert cd.REACHABILITY_WATCH_REL in items["reachability-coverage:Python"]["refresh"]
+    assert cd.REACHABILITY_WATCH in items["reachability-coverage:Python"]["refresh"]
 
 
 def test_reachability_coverage_respects_threshold(tmp_path):
@@ -1159,7 +1215,7 @@ def test_reachability_watch_review_clock(tmp_path):
     _seed_watch(ws, old)
     row = {i["item"]: i for i in cd.check_reachability_coverage(ws)}["reachability-watch:review"]
     assert row["status"] == "stale"
-    assert cd.REACHABILITY_WATCH_REL in row["refresh"]
+    assert cd.REACHABILITY_WATCH in row["refresh"]
 
 
 def test_reachability_watch_missing_register_is_pending(tmp_path):
@@ -1173,7 +1229,7 @@ def test_reachability_watch_unquoted_yaml_date_parses(tmp_path):
     """PyYAML loads a bare YYYY-MM-DD as datetime.date, not str."""
     ws = _mk_ws(tmp_path)
     _seed_lang_cache(ws, [{"Go": 100}])
-    p = ws / cd.REACHABILITY_WATCH_REL
+    p = _home() / cd.REACHABILITY_WATCH
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(f"reviewed: {cd._now().date().isoformat()}\nwatch: []\n", encoding="utf-8")
     row = {i["item"]: i for i in cd.check_reachability_coverage(ws)}["reachability-watch:review"]
@@ -1183,7 +1239,7 @@ def test_reachability_watch_unquoted_yaml_date_parses(tmp_path):
 def test_reachability_watch_bad_date_is_unavailable(tmp_path):
     ws = _mk_ws(tmp_path)
     _seed_lang_cache(ws, [{"Go": 100}])
-    p = ws / cd.REACHABILITY_WATCH_REL
+    p = _home() / cd.REACHABILITY_WATCH
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text('reviewed: "not-a-date"\nwatch: []\n', encoding="utf-8")
     row = {i["item"]: i for i in cd.check_reachability_coverage(ws)}["reachability-watch:review"]
@@ -1904,3 +1960,11 @@ def test_sibling_readme_audits_the_checkout_not_the_installed_pin(tmp_path, monk
     (out,) = cd.check_sibling_readmes(ws, sib)
     assert out["status"] == "fresh", out["detail"]
     assert "OldName" not in out["detail"]
+
+
+def test_shipped_compliance_data_is_what_drift_watch_reads():
+    """Provenance and catalogs come from traust-engine, not progress-tracker."""
+    assert (cd._compliance_data() / "provenance.json").is_file()
+    items = {i["item"]: i for i in cd.check_policy_provenance(Path("/nonexistent-ws"))}
+    for name in ("compliance-spine", "catalog-pci-dss", "catalog-soc2-tsc", "catalog-gdpr"):
+        assert items[f"provenance:{name}"]["status"] != "pending", items[f"provenance:{name}"]

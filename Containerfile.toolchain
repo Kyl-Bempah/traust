@@ -27,7 +27,6 @@ ARG OPENGREP_VERSION=1.25.0
 ARG GITLEAKS_VERSION=8.30.1
 ARG SYFT_VERSION=1.48.0
 ARG GRYPE_VERSION=0.115.0
-ARG OSV_SCANNER_VERSION=2.4.0
 ARG COSIGN_VERSION=3.1.1
 ARG GOVULNCHECK_VERSION=1.6.0
 ARG SKOPEO_VERSION=1.23.0
@@ -36,7 +35,7 @@ ARG PIP_AUDIT_VERSION=2.10.1
 
 LABEL name="harness-toolchain" \
       summary="Traust — complete runtime image" \
-      description="All-in-one image: pinned scanner binaries (grype, osv-scanner, \
+      description="All-in-one image: pinned scanner binaries (grype, \
 govulncheck, opengrep, gitleaks, syft, cosign, skopeo, yara, pip-audit), the full \
 Python stack (traust-engine, contracts, traust-ledger, traust), and \
 skill data. Pull, mount a target, run a profile." \
@@ -74,10 +73,9 @@ RUN curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSIO
 RUN curl -fsSL "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/grype_${GRYPE_VERSION}_linux_${TARGETARCH}.tar.gz" \
     | tar -C /usr/local/bin -xz grype
 
-# osv-scanner
-RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
-    curl -fsSL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_${ARCH}" \
-      -o /usr/local/bin/osv-scanner && chmod +x /usr/local/bin/osv-scanner
+# osv-scanner is not in the image: OSV is queried through its API. An
+# air-gapped deployment extends this image with osv-scanner and its offline
+# database (docs/setup.md "Air-gapped OSV scanning").
 
 # cosign
 RUN ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
@@ -125,10 +123,8 @@ ENV HARNESS_ROOT=/harness
 
 # --- Populate vuln DBs (can be skipped at build time with --build-arg SKIP_DB=1) ---
 ARG SKIP_DB=0
-ENV OSV_SCANNER_LOCAL_DB_CACHE_DIRECTORY=/root/.cache/osv-scanner
 RUN if [ "$SKIP_DB" = "0" ]; then \
       grype db update || true; \
-      osv-scanner scan source --offline-vulnerabilities --download-offline-databases -r /tmp || true; \
     fi
 
 # --- Smoke test: verify all tools resolve ---
@@ -136,7 +132,6 @@ RUN opengrep --version && \
     gitleaks version && \
     syft --version && \
     grype --version && \
-    osv-scanner --version && \
     cosign version && \
     govulncheck -version && \
     skopeo --version && \

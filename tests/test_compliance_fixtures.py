@@ -16,14 +16,8 @@ from traust.paths import skill_dir
 
 yaml = pytest.importorskip("yaml")
 
-from tests.compliance_paths import (
-    REGISTRY,
-    compliance_configs_available,
-    compliance_configs_dir,
-    compliance_skip_reason,
-)
+from tests.compliance_paths import compliance_fixtures_dir, compliance_registry, org_parameters
 
-_CONFIGS = compliance_configs_dir
 
 _SPEC = importlib.util.spec_from_file_location(
     "compliance_assert", skill_dir("compliance-check") / "scripts" / "compliance_assert.py"
@@ -32,21 +26,16 @@ ca = importlib.util.module_from_spec(_SPEC)
 sys.modules["compliance_assert"] = ca
 _SPEC.loader.exec_module(ca)
 
-pytestmark = pytest.mark.skipif(not compliance_configs_available(), reason=compliance_skip_reason())
-
 
 def _registry():
-    return yaml.safe_load((_CONFIGS() / REGISTRY).read_text())
+    return yaml.safe_load(compliance_registry().read_text())
 
 
 def _org_params():
-    return yaml.safe_load((_CONFIGS() / "org-parameters.yaml").read_text())
+    return yaml.safe_load(org_parameters().read_text())
 
 
 def _checks():
-    cfg = _CONFIGS()
-    if not cfg.is_dir():
-        return []
     return _registry()["checks"]
 
 
@@ -54,7 +43,7 @@ def _checks():
     "check", _checks(), ids=lambda c: c["id"] if isinstance(c, dict) else str(c)
 )
 def test_check_calibrates_on_its_fixtures(check):
-    fdir = _CONFIGS() / check.get("fixtures", f"fixtures/{check['id']}/")
+    fdir = compliance_fixtures_dir() / check.get("fixtures", f"fixtures/{check['id']}/")
     bad = fdir / "bad" / "snapshot.json"
     good = fdir / "good" / "snapshot.json"
     assert bad.is_file() and good.is_file(), (

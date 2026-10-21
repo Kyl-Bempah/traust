@@ -71,7 +71,7 @@ projections.
 | `dependency_audit` | `prose` + `entries[]` (`package`, `version`, `status`, `notes`). |
 | `negative_results` | Areas verified clean: `area`, `result`, optional `files`. |
 | `asvs_coverage` | ASVS chapter coverage entries. |
-| `review_surface_coverage` | One entry per review surface (the `review_surface` enum in traust-contracts), each with a status from `review_surface_status`; required on `code`-profile audits from traust 0.20.0 — see deltas. |
+| `review_surface_coverage` | One entry per review surface (the `review_surface` enum in traust-contracts), each with a status from `review_surface_status`; required on `code`-profile audits from traust 0.20.0 and `rpm`-profile audits from 0.21.0 — see deltas. In a `*-findings-current.json` it is the audit's record merged with later scans' records ([review-surfaces.md](../harnessing/3-audit/secure-code-audit/review-surfaces.md#scans-that-follow-an-audit)). |
 | `scanner_correlation` | Scanner tool results, including the judge decisions the rule-mining lane consumes. |
 | `peach_isolation_review` | Always emitted on `code` and `container` profiles — see deltas. |
 | `disposition_summary` | Cumulative reports only: counts per validity and resolution state, derived from the ledger. |
@@ -138,6 +138,8 @@ projections.
 - `locations[].path` is the dist-git file (spec, patch, tekton) or a path in
   the prepared source tree.
 - No `peach_isolation_review` (packaging repos are not tenant boundaries).
+- `review_surface_coverage` is **always emitted** (required from traust
+  0.21.0), with the same evidence rules as the `code` profile.
 
 ### `container` — secure-container-audit (registry image audits)
 

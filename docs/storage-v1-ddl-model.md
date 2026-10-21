@@ -767,6 +767,7 @@ classDiagram
      JSONB attack_refs
      JSONB isolation_dimensions
      JSONB isolation_boundaries
+     JSONB review_surfaces
   }
   class triage_verdict {
     +TEXT binding_id
@@ -805,6 +806,7 @@ classDiagram
      TEXT|JSONB commit_timeline
      TEXT|JSONB evidence
      TEXT|JSONB recommendations
+     TEXT|JSONB review_surface_coverage
      TEXT notes
      TEXT footer
   }

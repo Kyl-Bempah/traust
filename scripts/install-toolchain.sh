@@ -30,6 +30,9 @@ TOOLS_YAML="$REPO_ROOT/config/external-tools.yaml"
 BIN_DIR="${HARNESS_BIN_DIR:-$HOME/.local/bin}"
 
 # Tool → profile mapping (mirrors external-tools.yaml consumers).
+# osv-scanner is deliberately absent: OSV is queried through its API, and an
+# air-gapped deployment installs osv-scanner and its offline database itself
+# (docs/setup.md "Air-gapped OSV scanning"; owner decision 2026-10-20).
 #
 # A newline-delimited "profile:tools" table rather than `declare -A`, because
 # macOS ships bash 3.2 and associative arrays are bash 4+. Under 3.2 the old
@@ -38,11 +41,11 @@ BIN_DIR="${HARNESS_BIN_DIR:-$HOME/.local/bin}"
 # aborted the script before it did anything. Single source of truth: both
 # helpers below read this one string.
 PROFILE_TABLE='
-secure-code-audit:opengrep gitleaks syft grype osv-scanner govulncheck pip-audit
+secure-code-audit:opengrep gitleaks syft grype govulncheck pip-audit
 secure-container-audit:syft grype cosign skopeo yara
-secure-rpm-audit:syft grype yara govulncheck osv-scanner joern
-vuln-scan:opengrep gitleaks osv-scanner
-dependency-watch:gitleaks osv-scanner
+secure-rpm-audit:syft grype yara govulncheck joern
+vuln-scan:opengrep gitleaks
+dependency-watch:gitleaks
 impact-analysis:joern
 triage:govulncheck
 ledger-signing:cosign
@@ -76,7 +79,7 @@ EOF
 }
 
 # Tools installed by direct download from their upstream GitHub release.
-DIRECT_TOOLS="opengrep gitleaks syft grype osv-scanner cosign govulncheck"
+DIRECT_TOOLS="opengrep gitleaks syft grype cosign govulncheck"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -228,20 +231,6 @@ install_anchore() {
   ok "$tool installed to $BIN_DIR"
 }
 
-install_osv_scanner() {
-  if command -v osv-scanner &>/dev/null; then ok "osv-scanner already installed"; return; fi
-  local v tmp
-  v="$(pin_for osv-scanner)"
-  info "Installing osv-scanner v$v..."
-  if [[ "$DRY_RUN" == "true" ]]; then warn "dry-run: would install osv-scanner v$v"; return; fi
-  tmp="$(mktemp)"
-  # Upstream publishes no checksum file for osv-scanner (same caveat as opengrep).
-  fetch "https://github.com/google/osv-scanner/releases/download/v${v}/osv-scanner_${OS}_${ARCH}" "$tmp"
-  install_bin "$tmp" osv-scanner
-  rm -f "$tmp"
-  ok "osv-scanner installed to $BIN_DIR"
-}
-
 install_cosign() {
   if command -v cosign &>/dev/null; then ok "cosign already installed"; return; fi
   local v asset base tmp
@@ -340,7 +329,6 @@ install_tool() {
     opengrep)    install_opengrep ;;
     gitleaks)    install_gitleaks ;;
     syft|grype)  install_anchore "$1" ;;
-    osv-scanner) install_osv_scanner ;;
     cosign)      install_cosign ;;
     govulncheck) install_govulncheck ;;
     skopeo)      install_skopeo ;;
@@ -356,7 +344,7 @@ populate_dbs() {
   local tools="$1"
   local db_tools=""
   for tool in $tools; do
-    if [[ "$tool" == "grype" || "$tool" == "osv-scanner" ]]; then
+    if [[ "$tool" == "grype" ]]; then
       if command -v "$tool" &>/dev/null; then
         db_tools="$db_tools $tool"
       fi
@@ -373,9 +361,6 @@ populate_dbs() {
     case "$tool" in
       grype)
         grype db update && ok "grype DB updated" || warn "grype DB update failed"
-        ;;
-      osv-scanner)
-        osv-scanner --download-offline-databases && ok "osv-scanner DB updated" || warn "osv-scanner DB update failed"
         ;;
     esac
   done

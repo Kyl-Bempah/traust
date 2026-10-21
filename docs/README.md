@@ -50,12 +50,13 @@ For security engineers triaging findings, verifying exploitability, and tracking
 
 ## Contributors — changing the workflow engine
 
-For engineers editing skills, scripts, schemas, or any of the five component repos.
+For engineers editing skills, scripts, schemas, or any component repository.
 
 | Doc | What it covers |
 |-----|----------------|
 | [architecture.md](architecture.md) | Pipeline shape, skill anatomy, adapter system, config & context model, code placement |
-| [components.md](components.md) | The five component repos: what each owns, dependency order, version pinning, release procedure, and "which repo do I change?" |
+| [components.md](components.md) | Component ownership, current dependencies, core migration boundaries, commit pinning, and update order |
+| [traust-core platform API](https://github.com/traust-security/traust-core) | Shared models, persistence, services, and implementation status |
 | [deterministic-inferential-mix.md](deterministic-inferential-mix.md) | Where deterministic tooling belongs and where the LLM does the work — the boundary and its rationale |
 | [signing.md](signing.md) | Ledger signing: key management, the verification flow, optional vs. enforced |
 | [safe-exec.md](safe-exec.md) | The `safe_exec` sandbox: profiles, blocked constructs, gate rule S10 |

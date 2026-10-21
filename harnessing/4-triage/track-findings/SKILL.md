@@ -420,6 +420,16 @@ the countersign gate, and conflict detection
 surfaced in a "needs re-review" section, never silently resolved), and
 writes `<repo>-findings-current.{json,md}`.
 
+It also merges the **review-surface coverage** recorded by later scans.
+It finds `/vuln-scan` and `/verify-remediation` reports through the
+`source.ref` of the events it replays, and as the repo's own
+`<repo>-vuln-findings.json` and `<repo>-remediation-verification.json` beside
+the audit. Only scans dated on or after the audit count. The merge rules are in
+[review-surfaces.md → Scans that follow an audit](../../3-audit/secure-code-audit/review-surfaces.md#scans-that-follow-an-audit).
+In short, a newer `negative` never hides an open finding, and a scan's
+`out_of_scope` never overwrites the audit's record. When no scan carries a
+record, the audit's own record (or its absence) passes through unchanged.
+
 ### Phase 4 — Validate and deliver
 
 ```bash

@@ -1,0 +1,14 @@
+# Test-suite org parameters (labeled fiction, not an org declaration). The
+# chk-region-allowlist fixtures depend on us-east-1 being allowed and
+# sa-east-1 not.
+version: 1
+declared_by: "Example Security Team (replace before the first assessment)"
+declared_on: "2026-01-01"
+parameters:
+  allowed_data_regions:
+    value: ["us-east-1", "eu-west-1"]
+    controls: ["gdpr-technical:gdpr-residency"]
+    note: "placeholder: your approved data regions, and the policy they come from"
+  account_review_frequency_days:
+    value: 90
+    controls: ["nist-800-53-rev5:ac-2"]

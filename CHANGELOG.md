@@ -2,6 +2,534 @@
 
 All notable changes to Traust are documented here.
 
+## [0.34.2]
+
+- **Pins traust-engine 0.37.1 (88c8065): `go.mod` `replace` directives
+  are honoured** in the dependency pre-scan.
+  - Requires replaced with a directory in the checkout are the project's
+    own modules and are no longer reported. On etcd that removes 3 false
+    positives.
+  - Requires replaced with another module or version query what actually
+    builds.
+
+## [0.34.1]
+
+- **Test and dev dependencies are tagged, never skipped** (owner decision
+  2026-10-21). Pins traust-engine 0.37.0 (9916c9e).
+  - Candidates reachable only through Maven `test` scope, npm
+    `devDependencies`, Cargo `[dev-dependencies]` or Poetry dev groups carry
+    `dependency_scope: test` / `dev`.
+  - `/secure-code-audit` and `/vuln-scan` treat them as build- and
+    test-environment exposure, not shipped code. No tag means runtime or
+    unknown.
+  - On keycloak, 117 of 355 candidates are `test` and 13 are `dev`.
+- This change was meant to ship in 0.34.0 (traust#101). It was pushed a
+  minute after that PR merged, so it lands here.
+
+## [0.34.0]
+
+- **Manifests without a lockfile are resolved through deps.dev, on by
+  default** (owner decisions 2026-10-20 option c and 2026-10-21). Pins
+  traust-engine 0.36.0 (683552d, which includes 0.35.1).
+  - `traust adapters osv --repo` resolves the transitive tree of every
+    `package.json`, `requirements*.txt`, `pom.xml` and `Cargo.toml`
+    without a lockfile, and resolves declarations with no version at
+    deps.dev's default. The added candidates carry `version_basis:
+    resolved` / `resolved-default` and `resolved_via`. What can't be
+    resolved stays in `unresolved_manifests` with a reason.
+  - **Opt out** with `access: disabled` on the new `deps_dev` source in
+    `feeds.yaml` (also a new `ACCESS_MODES` value). A config home without
+    the source prints a NOTE and doesn't resolve.
+  - **Terms and attribution documented** in `config/feeds.yaml`,
+    `docs/external-dependencies.md` (the Google APIs Terms of Service
+    obligations on the operator, CC BY 4.0 for the resolved data, and the
+    attribution text) and `docs/setup.md`. Every scan carries the
+    attribution in `metadata.resolution.attribution`.
+  - `/secure-code-audit` and `/vuln-scan`: resolved candidates are an
+    approximation and are never promoted on their own.
+
+## [0.33.0]
+
+- **Container audits: grype reads syft JSON, and OSV adds language-package
+  advisories** (owner decisions 2026-10-20, option b plus fixes A and B).
+  Pins traust-engine 0.35.0 (f9259ad).
+  - **Fixed: grype ran on CycloneDX**, which drops syft's record of which
+    OS package installed each file. grype then matched upstream advisories
+    against language packages an RPM installed, which carry Red Hat
+    backports. On `ubi9/python-311` that added 31 likely false positives
+    (13 High). `/secure-container-audit` Phase 2 now writes syft JSON and
+    CycloneDX in one syft run; Phase 3 runs grype on the syft JSON. The
+    CycloneDX file still feeds the portfolio graph.
+  - **`traust adapters osv --sbom <syft.json> [--grype <grype.json>]`**
+    looks up the image's language packages that no OS package installed,
+    through the OSV API (osv-scanner offline when air-gapped). It tags
+    `also_in_grype` and reports `grype_dedupe` counts, with the same
+    `complete` / `degraded` (exit 3) / `failed` (exit 2) statuses.
+    CycloneDX input is refused (exit 2).
+  - **grype's own matches on OS-installed language packages are listed**
+    (`grype_os_installed`, with the owning packages). Even from syft JSON,
+    grype reported 26 of them on `ubi9/python-311` (1 critical, 12 high,
+    mostly npm packages the nodejs RPM ships). The skill records them as
+    `installed by <owner>` and never promotes one on the upstream advisory
+    alone.
+  - `/secure-container-audit` Phase 3: grype stays primary. Only
+    `also_in_grype: false` candidates become new `dependency_audit`
+    entries; failures are a coverage gap under `osv-scanner`. A language
+    package an RPM installed is judged by the RPM's RHSA state.
+
+## [0.32.1]
+
+- **The dependency pre-scan's report key is `osv-scanner` again.** 0.31.0
+  renamed it to `osv` in `/secure-code-audit` and `/vuln-scan` (the
+  `deterministic_steps` key and the `coverage_gaps` tool), out of step with
+  the report schema's description, `docs/report-structure.md` and every
+  earlier report. The key names the step, not the path: it stays
+  `osv-scanner` whether the OSV API or, air-gapped, the binary ran. No
+  report on record used `osv`.
+
+## [0.32.0]
+
+- **osv-scanner leaves the default install** (scanner-currency step 6,
+  owner decisions 2026-10-20). OSV is queried through its API; air-gapped
+  deployments provide osv-scanner and its offline database themselves.
+  Pins traust-engine 0.34.0, which no longer fetches or tracks that
+  database.
+  - `install-toolchain.sh`: osv-scanner is in no profile and is no longer
+    downloaded; `setup` no longer populates its database.
+  - `Containerfile.toolchain` and `containerfile-build-args.py`: no
+    osv-scanner binary, build arg or database. An air-gapped deployment
+    extends the image.
+  - **The pin stays, as the tested version for air-gapped adopters**:
+    `config/external-tools.yaml` marks the row `provided_by: adopter` with
+    `consumers: []`, and advances `expected` 2.4.0 → 2.7.0 (the latest
+    release; the air-gapped smoke in 0.31.0 ran 2.7.0). When osv-scanner
+    is absent, the `external-tools:osv-scanner` drift row compares the pin
+    itself with upstream (`fresh` / `stale`) instead of reporting
+    `pending`; when it is installed, the usual checks apply.
+  - Docs: `docs/setup.md` (install table, container image, air-gapped
+    steps) and `PROCESS.md`.
+
+## [0.31.0]
+
+- **OSV through the API; osv-scanner is no longer needed for dependency
+  scans** (owner decision 2026-10-20, agreed with Shaun). Pins traust-engine
+  0.33.0, whose `osv` adapter reads lockfiles and manifests and queries the
+  OSV API through one shared client.
+  - **`traust adapters osv`** uses the API by default. Output is
+    `<repo>-osv.json`, artifact `osv-dependency-candidates`, with lookup
+    provenance in `metadata`.
+    - Exit 3 when the scan is `degraded`, meaning some lookups went
+      unanswered or some manifests didn't parse.
+    - **Exit 2 and `status: failed`** when OSV can't be used at all: one
+      probe lookup fails before the scan (no retrying every batch), or no
+      package is answered. An `ERROR:` line names the endpoint and the
+      reason; the artifact is still written, with a `failure` block and no
+      candidates.
+    - A note when `transitive_coverage` is `partial` (manifests with no
+      lockfile, or a pinned requirements file that wasn't compiled).
+- **Air-gapped OSV scanning is a configuration option; the API is the
+  default.** New `access` setting on the `osv` source in `feeds.yaml`:
+  `api` (default) or `air-gapped`. Air-gapped, `traust adapters osv` runs
+  osv-scanner offline against a local OSV database. The adopter provides
+  the binary and the database; the harness installs neither and does not
+  keep them current. A missing binary or database is `failed`, exit 2. The
+  fleet sweep needs the API and writes a `failed` worklist (exit 2) in that
+  mode. Documented in `config/feeds.yaml`, `docs/setup.md` ("Air-gapped OSV
+  scanning"), `docs/external-dependencies.md`, `docs/requirements.md`,
+  `docs/getting-started.md` and `config/README.md`. `--source` overrides
+  the setting for one run.
+  - **`fleet_sweep`** runs on the shared client. Before, three failed calls
+    became "no vulnerabilities", page tokens were ignored, and failed detail
+    fetches were dropped. Unanswered pairs are now counted and listed
+    (`pairs_unanswered`, `unanswered_pairs`), and a degraded sweep exits 3.
+    A sweep where OSV can't be used at all (failed probe, nothing
+    answered, or `access: air-gapped`) is `failed` and exits 2.
+  - **`resolve-advisory-symbols`** runs on the shared client. A failed alias
+    fetch no longer turns into a false "no fix commit".
+- **No inference in place of data** (scanner-currency workstream 10, shipped
+  ahead per redesign D8).
+  - `/secure-code-audit`'s dependency review: a skipped or degraded scanner
+    is a coverage gap and no dependency conclusion either way. A manual
+    review enumerates packages but never names CVEs from memory.
+  - `/impact-analysis`: vulnerable ranges and fixed versions come from a
+    fetched advisory, never from recall.
+  - `/secure-container-audit`, `/secure-rpm-audit`, `/dependency-watch`
+    and `/vuln-scan` carry the same rules.
+  - The skills' tool permissions now match the commands they run, including
+    `syft` and `grype` for `/secure-code-audit`.
+
+## [0.30.0]
+
+- **Nothing reads `progress-tracker/configs/` any more** (owner decision,
+  2026-10-17). Deployment config lives in the config home
+  (`TRAUST_CONFIG_HOME`), with a template here in `config/`.
+  - **New templates:** `sla-policy`, `org-parameters`, `adr-registry`,
+    `reachability-watch` and `benchmark-targets` (`*.example.yaml`), each
+    schema-valid and estate-neutral. `install_traust` does not copy them
+    into a new config home, because their placeholder values would be
+    reported as if someone had declared them.
+  - **`/drift-watch`** reads `adr-registry.yaml`, `sla-policy.yaml`,
+    `org-parameters.yaml` and `reachability-watch.yaml` from the config
+    home, and the framework provenance and catalogs from traust-engine.
+    Before this, the path was built three different ways in one file.
+  - **`/compliance-check`** takes the control-to-check mapping from
+    traust-engine (`--registry` still overrides), org parameters from the
+    config home, and the scope registry from the engine's
+    `compliance.scope_registry()`.
+  - **`traust ops index-adrs`** defaults to the config home's
+    `adr-registry.yaml`.
+  - **`/recall-benchmark`** documents the answer key at
+    `$TRAUST_CONFIG_HOME/benchmark-targets.yaml` and the fixture sources at
+    `$TRAUST_CONFIG_HOME/recall-benchmark/{canaries,seeded}/`.
+  - **`/sla-view`** uses the config home's `sla-policy.yaml`; with none
+    there, it fails and names the template.
+- **Synthetic compliance fixtures moved into `tests/fixtures/compliance/`**
+  (the per-check good and bad snapshots, and the efficacy seeded target). The
+  compliance tests used to skip whenever progress-tracker wasn't checked out;
+  they now always run. `traust ops score-compliance-efficacy` defaults to the
+  in-repo seeded target.
+- **The calibration test ran zero times.** `test_compliance_phase4.py`
+  looked for `iac-inventory-calibration.json`, but the snapshot is
+  `iac-inventory-app-interface-mirror.json`, and its module-level skip also
+  hid every other test in the file. It now looks in the operator config
+  home under `compliance/calibration/`, and only the two idempotence tests
+  skip when the snapshot is absent.
+- **Recall-benchmark fixture pins are reproducible again.** `build_canaries.py`
+  committed with the builder's git config, so a builder that signs commits
+  got a new SHA every run (the signature carries a timestamp). The fixture
+  commit is now never signed.
+- **Pins** traust-engine 0.31.0.
+
+## [0.29.0]
+
+- **Deprioritized threats carry review-surface tags.** traust-contracts
+  0.60.0 lets a section 5 row carry `review_surfaces`, and traust-engine
+  0.30.0 renders and lints it.
+  - `/threat-model` bootstrap tags the section 5 row it writes when a check
+    on a tagged surface turns up nothing, so the model records that the
+    surface was checked and the threat set aside.
+  - `/secure-code-audit`'s threat-model coverage diff counts those tags
+    with the entry-point and threat tags: each must end the audit as
+    `finding`, `negative` or `not_assessed`.
+- **The vuln-findings schema enforces the full-scan rule.** A record that
+  answers any review surface `out_of_scope` must carry
+  `metadata.additional.coverage_diff`. The engine validator already
+  checked this; now the schema does too, for every consumer.
+- **Pins** traust-contracts 0.60.0, traust-ledger 0.11.3 and traust-engine
+  0.30.0.
+
+## [0.28.1]
+
+- **The docs gate no longer checks the old GitLab group page.**
+  `check docs-consistency` used to read `../gitlab-profile/README.md` when
+  it sat next to the harness checkout, and failed when that page's
+  version or skill count disagreed with this repo. Traust lives on GitHub
+  now, so a stale GitLab page could fail the harness's tests and force a
+  GitLab change for a GitHub release. The check, its tests and the
+  `check-harness-docs` sections that described it are removed.
+
+## [0.28.0]
+
+- **Pins traust-engine 0.29.0.** The rendered threat-model Markdown now
+  shows `review_surfaces`: sections 3 and 4 gain a trailing column when
+  any row is tagged. The linter checks the tags against the enum, and the
+  corpus parser reads them back.
+- **threat-model bootstrap emits JSON, then renders.** Stage 5 used to
+  assemble `_model.md` by hand and gate on `reporting lint`. It now
+  composes `<repo>-threat-model.json` per SKILL.md Step 2 and runs
+  `rate-threats`, then `validate`, then `render`, so a bootstrap model
+  follows the same JSON-first path as every other model. The provenance
+  block no longer carries `owner`.
+- **`traust admin checkpoint reset` leaves an empty state dir.** It used
+  to delete the dir, so a step that wrote into it before the first
+  `save` (a pre-scan seed, for example) failed on a missing directory.
+- **vuln-scan and verify-remediation record tools where the schema has
+  room.** Vuln-findings metadata has no `tools` field, so vuln-scan
+  records whether the k8s-hardening step ran in
+  `metadata.additional.deterministic_steps`. verify-remediation puts
+  scanner versions in `metadata.additional.tools`.
+
+## [0.27.2]
+
+- **Pins traust-engine 0.28.0** (rule pack v1.9).
+  - The LIKE-wildcard rule catches a bound f-string parameter such as
+    `(f"{owner}/{folder}/%",)`.
+  - SSRF taint follows `request.get_json()` and friends, and stops at a
+    database fetch.
+  - The new `traust-python-ssrf-stored-url` flags an outbound call to a URL
+    read from a database row or model field.
+  - A default `traust adapters opengrep` run now finds both planted defects
+    the `team-notes` recall fixture's audit run missed.
+
+## [0.27.1]
+
+- **The config-matrix redacts credentials in every tier, not just Python
+  settings.** A secure-code-audit run on the `team-notes` recall fixture
+  found the pre-scan copying a hardcoded `TOKEN_SIGNING_KEY` verbatim into
+  its artifact.
+  - Redaction moved into the shared triple builder, so Helm, Kustomize,
+    Compose, Kubernetes env and env-chain defaults are covered too. The
+    env-chain tier's sink expression, which quotes the source line, is
+    redacted as well.
+  - Names that count as credentials:
+    - any secret-class name, now also including `signing_key`,
+      `encryption_key`, `hmac_key` and `salt`
+    - any name whose last segment ends in key, token, salt, secret or
+      password at a word boundary (`SIGNING_KEY`, `apiToken`,
+      `session-secret`), but not `public_key`, `primary_key`,
+      `sort_key` and similar
+    - templated values (`${X}`, `{{ … }}`) are not literals and stay as
+      they are
+  - A redacted default is reported as `<hardcoded literal, N chars>`, marked
+    `literal_redacted`, and judged as a weak default.
+  - Verification toggles with words between the parts now count, for
+    example `VERIFY_WEBHOOK_SIGNATURES`.
+  - On five real estate repos, no triple was lost and none was
+    reclassified. 15 credential defaults were newly redacted, from env
+    fallbacks, Compose and Kubernetes env. None of the redacted values
+    appears anywhere in the new output.
+
+## [0.27.0]
+
+- **`/recall-benchmark` supports seeded fixtures.** `build_canaries.py` now
+  accepts a `seed.yaml` answer key beside the existing `canary.yaml`: a
+  synthetic app with one expected finding per planted defect and no
+  `injection` block, registered as a `bt-seeded-<name>` target. Seeded
+  fixtures live in `progress-tracker/configs/benchmark-seeded/`, apart from
+  the canaries, so adding one leaves the canaries' entries untouched.
+  - The builder refuses a source with both answer keys, or with an answer
+    key anywhere inside `tree/` (it used to check only `tree/canary.yaml`).
+  - Seeded fixtures are always development split: their author has read the
+    answer key.
+  - The manifest is now written with `allow_unicode`, so a rebuild no longer
+    re-escapes every non-ASCII character in existing entries.
+  - Materializing skips `__pycache__/` and `*.pyc`, so a target's SHA depends
+    only on committed content, not on who last ran Python over the source.
+  - The skill documents seeded fixtures: one defect per file (matching is by
+    path and CWE), and nothing in `tree/` may hint at the answers.
+
+## [0.26.0]
+
+- **The config-matrix pre-scan expands Python settings** (new
+  `python-settings` tier in `expand_config_matrix.py`).
+  - **What it reads:** literals in settings modules (`settings*.py`,
+    `config*.py`, `conf.py`, `configuration*.py`) and in settings classes
+    (names ending `Settings`, `Config` or `Configuration`, or extending
+    pydantic's `BaseSettings`). Files are parsed with `ast`, never imported
+    or run. Test files, `conftest.py` and test directories are skipped.
+  - **Sinks:** each triple's sink lists the setting's readers
+    (`settings.X`, `config.X`, `app.config["X"]`, `config.get("X")`,
+    `getattr(settings, "X")`), so the judge can rate a flag by its worst
+    reader.
+  - **Classification:** by the setting's name, so module-path values such
+    as `rbac.urls` no longer read as auth. A value marks only a DSN or a
+    bind-all address (`0.0.0.0`). Test toggles (`TESTING`), CSRF and
+    signature-verification switches are now judged. A debug toggle is weak
+    when it's on.
+  - **Hardcoded credentials:** a secret-shaped name, or a URL with an
+    embedded password, is a judged `weak_default`. It is reported as
+    `<hardcoded literal, N chars>` or with the password masked, marked
+    `literal_redacted`, and never copied into the artifact.
+  - **Unparsed modules:** a settings module that doesn't parse is a
+    `coverage_gap`.
+  - The new class words (`testing`, `csrf`, `skip_auth`,
+    `verify_signature`) also apply to the other tiers. On five real Python
+    repos, the existing tiers' triples were unchanged.
+- `/secure-code-audit`'s config-matrix section documents the tier. An
+  `unresolved` sink means no reader in this tree, not an unused setting,
+  because frameworks read most of them.
+
+## [0.25.0]
+
+- **`/threat-model` bootstrap maps the review surfaces.**
+  - The Surface-mapper's grep table gains five rows: credential verification
+    and minting, ownership resolution, security config flags, outbound fetch
+    and shared content stores. Route and guard coverage, the sixth surface,
+    stays under Network.
+  - Entry points those rows produce are tagged with `review_surfaces`.
+  - Stage 4's gap-fill walks each tagged surface's check from
+    `review-surfaces.md`, alongside STRIDE and the infra/IAM walk. Each
+    plausible answer becomes a section 4 row tagged with the surfaces it
+    exercises; a check that finds nothing goes in section 5 with the reason.
+  - Each new row names the tag it produces. `scope-enforcement` goes on
+    Network entry points behind a role, scope or permission check. Outbound
+    fetch means a server-side request whose destination someone other than
+    the operator can influence. A threat's tags are a subset of the union of
+    its entry points' tags. The Surface-mapper Returns shape and the
+    checkpoint templates carry `review_surfaces`.
+- **`/secure-code-audit` reads the threat model's review-surface tags from
+  its JSON** (`<repo>-threat-model.json`, which only the JSON carries). Each
+  surface the model tags must end `finding` or `negative`, or `not_assessed`
+  with its gap, never `not_applicable`.
+- **The `/vuln-scan` review brief checks the review surfaces.**
+  - "WHAT TO LOOK FOR" gains a REVIEW SURFACES group, one line per surface.
+    A shipped default that switches a control off is reportable even though
+    flags are operator-set; the brief's exclusion for operator-controlled
+    flags covers flags as an attack vector, not unsafe defaults.
+  - The depth heuristics add (d): apply each touched surface's check.
+  - The brief template now carries the depth heuristics (a)–(d) itself.
+  - Each reported finding names its `<review_surface>`: the surface where
+    the defect sits, whatever its CWE.
+  - Each review subagent returns a `<surface>` block per surface it
+    examined, using only the six ids.
+  - Step 4 builds `review_surface_coverage` from the subagents' output:
+    - `finding` lists every finding naming the surface.
+    - `negative` combines what each subagent examined, and only when no
+      finding names the surface.
+    - `not_applicable` requires every subagent that looked to agree.
+    - A surface nobody examined is `not_assessed` on a full scan and
+      `out_of_scope` on a diff scan, never `negative`.
+  - In `--diff` mode, a cluster that touches a verifier, a flag or its
+    readers, an outbound call, an owner lookup, a route guard or a
+    content-assembly path gets the matching surface check.
+- `/vuln-scan`'s diff-packet builder no longer quotes a deployment's pilot
+  cost figure in its docstring.
+
+## [0.24.0]
+
+- **Per-model cache rates and per-request long-prompt pricing.** Pins
+  traust-contracts 0.59.0, traust-ledger and traust-engine 0.27.0.
+  - **Cache rates:** `config/model-registry.yaml` sets
+    `cache_read_multiplier` 0.05 for Opus 5.5 and Sonnet 5.5, and 0.025 for
+    Mythos 5.1 and Fable 5.1, per the published rate card. Every other model
+    keeps the standard 0.1.
+  - **Haiku 5.5 long prompts:** `claude-haiku-5-5` gets a `long_prompt` tier.
+    A request whose prompt (input, cache reads and cache writes) is over 100k
+    tokens is priced at $0.50/$2.50.
+  - **Financial report:** `build_financial_report`'s transcript collector
+    splits long-prompt requests out per request (`collect_spend.add_usage`),
+    and both of its pricing paths pass the split through.
+  - **Effect:** this workspace's October 2026 Claude Code spend, priced from
+    the registry, drops from $1,094.52 to $791.65 (−27.7%), all of it from
+    Opus 5.5 cache reads.
+- **`out_of_scope` only on diff scans.** The pinned engine rejects an
+  `out_of_scope` review-surface entry on a vuln-findings report without
+  `metadata.additional.coverage_diff`.
+## [0.23.1]
+
+- **`render-narrate` escalates to Sonnet 5.5.** `claude-sonnet-5-5` now comes
+  before `claude-sonnet-5` in its approved list, so a `sonnet-class`
+  escalation resolves to Sonnet 5.5, as `fact-judge` already does. Its floor
+  model (Haiku 5.5) is unchanged.
+
+## [0.23.0]
+
+- **`fact-judge` prefers Sonnet 5.5** (`claude-sonnet-5-5` first, then
+  `claude-sonnet-5`). The price is the same, and cache reads cost half as much.
+- **`render-narrate` prefers Haiku 5.5** (`claude-haiku-5-5` first, then
+  `claude-haiku-4-5-20251001`), at a tenth of Haiku 4.5's price. Prompts over
+  100k tokens bill at $0.50/$2.50, which the registry's one price per model
+  doesn't record, so spend on long prompts is understated.
+- **Fable 5.1 is a candidate on every `mythos-class` role**
+  (`candidates: [claude-fable-5-1]`). It awaits evals against Mythos 5.1 and
+  changes no routing until it's approved.
+
+## [0.22.0]
+
+- **Model registry updated to the current Anthropic lineup** (published rate
+  card, checked 2026-10-16).
+  - **Mythos 5.1 replaces Mythos 5** in every role that approved it: all
+    eight `mythos-class` roles, plus the mythos escalation entries in
+    `fact-judge`, `fuzz-author` and `vuln-scan`. Mythos 5.1 is a
+    limited-availability model, so a deployment without access to it can no
+    longer resolve those roles.
+  - **Opus 5.5 is the preferred Opus**, then Opus 5, then Opus 4.8, in every
+    role that approved Opus 4.8. `fuzz-author` and `vuln-scan` now resolve to
+    Opus 5.5. `fact-judge` and `render-narrate` resolve at their own floors
+    and reach Opus only when escalated.
+  - **New rate-card entries:** `claude-mythos-5-1` and `claude-fable-5-1`
+    ($10/$50), `claude-opus-5-5` ($4/$20), `claude-sonnet-5-5` ($2/$10) and
+    `claude-haiku-5-5` ($0.10/$0.50 for prompts up to 100k tokens). Older
+    entries stay so past runs keep a price.
+  - **`claude-sonnet-5` corrected from $3/$15 to $2/$10.** Its launch price
+    became the standard price. Spend priced from the registry for Sonnet 5
+    was overstated by half, and drops by a third once recomputed.
+  - The `claude-opus-4-6` note no longer calls its price empirical; it is on
+    the published card.
+
+## [0.21.1]
+
+- **New `vuln-scan` model role** (floor `opus-class`, approved
+  `claude-opus-4-8` and `claude-mythos-5`, no ledger validity). `/vuln-scan`
+  resolved its model through the registry but named no role, so it ran
+  unrouted on whatever model the session had. It now runs on, and records
+  spend against, `registry models resolve vuln-scan`. The role is separate
+  from `deep-audit`, so scan cost tunes on its own. `docs/model-classes.md`
+  and `docs/standalone-usage.md` move `vuln-scan` to `opus-class`.
+- **Repo-root paths after the stage-directory move.** `/vuln-scan`,
+  `/triage`, `/countersign`, `/threat-model` and `/patch` defined `<harness>`
+  as `<skill-base>/../..`, which since the move to
+  `harnessing/<N>-<stage>/<skill>` points at `harnessing/`, not the repo root.
+  Script paths built on it (for example `/triage`'s
+  `<harness>/harnessing/4-triage/triage/scripts/...`) did not exist. Now
+  `<skill-base>/../../..`.
+- `/vuln-scan` diff mode names `scripts/resolve_baseline.py` and
+  `scripts/build_diff_packet.py` at their real paths.
+
+## [0.21.0]
+
+- **Review-surface coverage beyond the audit.** traust-contracts 0.57.0 and
+  traust-engine 0.26.0 (pinned here) declare and check the record on the
+  scans that follow an audit.
+  - `/vuln-scan` and `/verify-remediation` record `review_surface_coverage`
+    for the code they reviewed. A `--diff` or regression-scan scope answers
+    untouched surfaces `out_of_scope`. These reports have no
+    `negative_results`, so every status except `finding` carries a note.
+  - `/secure-rpm-audit` records the record too, weighting dist-git patches
+    and spec-shipped defaults.
+  - `/threat-model` tags threats and entry points with `review_surfaces`.
+  - `traust reporting validate` requires the record on vuln-findings,
+    verification and rpm-profile reports from this release (0.21.0) on.
+- **`build_cumulative` merges scan coverage into `*-findings-current.json`.**
+  It finds scan reports through the `source.ref` of the
+  `vuln_scan_report` / `verification_report` events it replays, and as the
+  repo's own `<repo>-vuln-findings.json` / `<repo>-remediation-verification.json`
+  (a scan with no new findings writes no events). Only scans dated on or
+  after the audit apply, oldest first.
+  - A `finding` adds its IDs; a routed regression maps to its `routed_id`.
+  - A `negative` replaces earlier answers, but never a `finding` entry whose
+    findings are still open. Its note becomes a `negative_results` entry.
+  - A scan's `out_of_scope`, `not_applicable` and `not_assessed` change
+    nothing.
+  - An audit with no record (before traust 0.20.0) starts at `not_assessed`
+    with matching `coverage_gaps`, once a scan record applies.
+  - `metadata.additional.cumulative.review_surface_sources` names the scan
+    that last answered each surface.
+  - With no scan record, the output is unchanged.
+  - `countersign` passes the audit path through, so its rebuilds merge too.
+- The method companion `review-surfaces.md` documents `out_of_scope`, the
+  scan records, the merge and the threat-model tags; `/track-findings` and
+  `docs/report-structure.md` link it.
+- `/vuln-scan`'s diff-mode dispatch note no longer carries a deployment's
+  pilot cost figures; dispatch stays an operator decision with no fixed cost
+  gate.
+
+## [0.20.2]
+
+- **Pins traust-engine 0.25.2** (`87a94fc`). `traust reporting validate`
+  directory sweeps skip hidden directories (`.triage-state/`,
+  `.threat-model-state/` and similar). The fingerprint, repository and strict
+  checks run only on a report-shaped document: before this, a skill working
+  file aborted the sweep for its whole directory with a traceback.
+
+## [0.20.1]
+
+- **Pins traust-contracts 0.57.0** (`4e900e7`), with traust-ledger and
+  traust-engine re-pinned to match.
+  - Verification and vuln-scan reports may now carry a declared
+    `review_surface_coverage` record, and `review_surface_status` gains
+    `out_of_scope`. Threat models may tag threats and entry points with
+    `review_surfaces`. `traust reporting validate` checks their shapes. The
+    fields stay optional until the skills produce them.
+  - Storage is at revision 4 (`verification.review_surface_coverage`,
+    `threat.review_surfaces`), so existing storage databases need
+    `Store.migrate()`.
+- **Pins traust-engine 0.25.1.** `traust reporting validate` now detects
+  `*-remediation-verification.json`, `*-refuted-register.json` and
+  `*-priv-profile.json` by filename. Until now each of them failed against
+  the audit-report schema.
+- `docs/storage-v1-ddl-model.md` is regenerated from the pinned contracts DDL.
+
 ## [0.20.0]
 
 - **`/secure-code-audit` records review-surface coverage as data.** Every

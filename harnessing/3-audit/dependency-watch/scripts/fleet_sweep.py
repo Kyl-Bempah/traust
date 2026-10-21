@@ -32,29 +32,37 @@ Usage (from the workspace root):
         [--ecosystem all|Go,npm,pypi,maven,cargo,ruby,nuget,actions]
         # docker/helm are graph-only (blast-radius), never OSV-swept
 
-Exit 0 on a completed sweep (per-pair API errors are counted, not
-fatal); 2 on usage errors.
+OSV is reached through traust-engine's shared OSV client: a lookup that
+fails, is rate-limited or is only partly paged is counted in the artifact
+(`lookup_issues`, `pairs_unanswered`, `advisory_details_missing`) and the
+sweep is `degraded`. Unanswered pairs are never read as "no advisories".
+
+When OSV cannot be used at all (one probe lookup fails before the sweep,
+no pair is answered, or the osv source's `access` is `air-gapped`, which
+leaves no API to sweep against) the sweep is `failed`: the artifact is
+written with a `failure` block and no worklist.
+
+Exit 0 on a complete sweep; 3 when the sweep completed but is degraded
+(the artifact is written, with status `degraded`); 2 when it failed or on
+usage errors.
 """
 
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 import datetime
 import json
 import re
 import sqlite3
 import sys
-import time
-import urllib.request
 from collections import Counter
 from pathlib import Path
 
-from traust.context import add_config_home_arg, resolve_results_root
-from traust.registry.osv_urls import osv_batch_url, osv_vuln_url
+from traust_engine.osv import BatchOutcome, OsvClient, Query
 
-OSV_BATCH = osv_batch_url()
-OSV_VULN = osv_vuln_url()
+from traust.context import add_config_home_arg, resolve_results_root
+from traust.registry.osv_urls import osv_access, osv_query_url
+
 BATCH_SIZE = 800
 SEV_RANK = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "UNKNOWN": 0}
 
@@ -146,58 +154,74 @@ def _build_batch_body(chunk: list[tuple[str, str]], ecosystem: str) -> dict:
     }
 
 
-def _post_batch(chunk: list[tuple[str, str]], ecosystem: str, retries: int = 3) -> list[dict]:
-    body = json.dumps(_build_batch_body(chunk, ecosystem)).encode()
-    req = urllib.request.Request(OSV_BATCH, data=body, headers={"Content-Type": "application/json"})
-    for attempt in range(retries):
-        try:
-            return json.loads(urllib.request.urlopen(req, timeout=60).read())["results"]
-        except Exception:
-            time.sleep(2 * (attempt + 1))
-    return [{} for _ in chunk]
+class _PostClient:
+    """Adapts a legacy ``post(chunk, ecosystem)`` callable (the tests' network-free
+    seam) to the shared client's ``query_batch`` / ``get_vulns`` interface."""
+
+    def __init__(self, post):
+        self._post = post
+
+    def query_batch(self, queries: list[Query]) -> BatchOutcome:
+        if not queries:
+            return BatchOutcome([])
+        eco = queries[0].ecosystem
+        results = self._post([(q.name, q.version) for q in queries], eco)
+        return BatchOutcome([[v["id"] for v in (r or {}).get("vulns") or []] for r in results])
+
+    def get_vulns(self, ids):
+        return {}, Counter()
 
 
-def query_osv_multi(pairs_by_eco: dict, jobs: int, post=_post_batch) -> dict[str, dict]:
+def _default_client(jobs: int) -> OsvClient:
+    return OsvClient(osv_query_url(), batch_size=BATCH_SIZE, workers=max(1, jobs))
+
+
+def query_osv_multi(
+    pairs_by_eco: dict,
+    jobs: int,
+    post=None,
+    *,
+    client=None,
+    issues: Counter | None = None,
+    unanswered: list | None = None,
+) -> dict[str, dict]:
     """vuln id -> {"ecosystem": <internal tag>, "pairs": {(name, ver)}}.
 
-    Batches within each ecosystem (BATCH_SIZE), mapping the internal tag
-    to the OSV canonical name for the query, and tags every hit with the
-    ecosystem that produced it so the worklist rows stay ecosystem-aware.
-    `post=` is an injectable seam (tests pass a network-free fake)."""
+    One query per (name, version) through the shared OSV client, per
+    ecosystem, mapping the internal tag to the OSV canonical name and
+    tagging every hit with the ecosystem that produced it. Lookups that
+    could not be answered are counted into `issues` and listed in
+    `unanswered` (when given), never treated as zero advisories.
+    `post=` is the legacy network-free test seam; `client=` the current one."""
+    if client is None:
+        client = _PostClient(post) if post is not None else _default_client(jobs)
     hits: dict[str, dict] = {}
     for eco, pairs in pairs_by_eco.items():
         canonical = OSV_ECOSYSTEM.get(eco, eco)
         keys = list(pairs)
-        chunks = [keys[i : i + BATCH_SIZE] for i in range(0, len(keys), BATCH_SIZE)]
-        if not chunks:
+        if not keys:
             continue
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as ex:
-            for chunk, results in zip(
-                chunks, ex.map(lambda c, e=canonical: post(c, e), chunks), strict=False
-            ):
-                for (m, v), res in zip(chunk, results, strict=False):
-                    for vuln in (res or {}).get("vulns") or []:
-                        h = hits.setdefault(vuln["id"], {"ecosystem": eco, "pairs": set()})
-                        h["pairs"].add((m, v))
+        body = _build_batch_body(keys, canonical)["queries"]
+        queries = [Query(canonical, q["package"]["name"], q["version"]) for q in body]
+        outcome = client.query_batch(queries)
+        if issues is not None:
+            issues.update(outcome.issues)
+        for (m, v), ids in zip(keys, outcome.ids, strict=True):
+            if ids is None:
+                if unanswered is not None:
+                    unanswered.append((eco, m, v))
+                continue
+            for vid in ids:
+                h = hits.setdefault(vid, {"ecosystem": eco, "pairs": set()})
+                h["pairs"].add((m, v))
     return hits
 
 
-def query_osv(
-    pairs: dict, ecosystem: str, jobs: int, post=_post_batch
-) -> dict[str, set[tuple[str, str]]]:
+def query_osv(pairs: dict, ecosystem: str, jobs: int, post=None) -> dict[str, set[tuple[str, str]]]:
     """Legacy single-ecosystem shim: vuln id -> hit (name, version) pairs.
     Reimplemented on query_osv_multi; kept for pre-multi-eco callers."""
     multi = query_osv_multi({ecosystem: pairs}, jobs, post=post)
     return {vid: h["pairs"] for vid, h in multi.items()}
-
-
-def _fetch_vuln(vid: str, retries: int = 3) -> dict | None:
-    for attempt in range(retries):
-        try:
-            return json.loads(urllib.request.urlopen(OSV_VULN.format(vid=vid), timeout=30).read())
-        except Exception:
-            time.sleep(1 + attempt)
-    return None
 
 
 def sev_band(vuln: dict, malicious: bool = False) -> str:
@@ -611,7 +635,31 @@ def verify_worklist(worklist: list[dict], hits: dict, verify=None) -> tuple[list
     return kept, refuted
 
 
-def main(argv=None, post=_post_batch) -> int:
+def _write_failed(out, graph_db, selected, per_eco_counts, total_pairs, status, detail) -> int:
+    """A sweep that could not use OSV: no worklist, never "no advisories". Exit 2."""
+    doc = {
+        "artifact": "fleet-osv-worklist",
+        "generated_at": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "graph_db": str(graph_db),
+        "ecosystems": selected,
+        "pairs_by_ecosystem": per_eco_counts,
+        "pairs_queried": total_pairs,
+        "status": "failed",
+        "failure": {"status": status, "detail": detail},
+        "pairs_unanswered": total_pairs,
+        "worklist": [],
+    }
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    print(
+        f"ERROR: OSV sweep failed ({status}): {detail} — no advisories were checked; "
+        f"this is NOT a clean sweep → {out}",
+        file=sys.stderr,
+    )
+    return 2
+
+
+def main(argv=None, post=None, client=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     add_config_home_arg(ap)
     ap.add_argument(
@@ -689,14 +737,53 @@ def main(argv=None, post=_post_batch) -> int:
         f"{len(selected)} ecosystem(s): " + " ".join(f"{e}:{n}" for e, n in per_eco_counts.items()),
         file=sys.stderr,
     )
-    hits = query_osv_multi(pairs_by_eco, args.jobs, post=post)
+    failure = None
+    if client is None and post is None and osv_access() == "air-gapped":
+        failure = (
+            "air-gapped",
+            "the osv source's access is air-gapped: the fleet sweep queries the OSV API "
+            "and does not run in that mode",
+        )
+    if failure:
+        return _write_failed(out, graph_db, selected, per_eco_counts, total_pairs, *failure)
+    if client is None:
+        client = _PostClient(post) if post is not None else _default_client(args.jobs)
+    probe = getattr(client, "probe", None)
+    first = next((e for e in selected if pairs_by_eco[e]), None)
+    if failure is None and probe is not None and first is not None:
+        canonical = OSV_ECOSYSTEM.get(first, first)
+        q = _build_batch_body([next(iter(pairs_by_eco[first]))], canonical)["queries"][0]
+        failure = probe(Query(canonical, q["package"]["name"], q["version"]))
+    if failure:
+        return _write_failed(out, graph_db, selected, per_eco_counts, total_pairs, *failure)
+    lookup_issues: Counter = Counter()
+    unanswered: list = []
+    hits = query_osv_multi(
+        pairs_by_eco, args.jobs, client=client, issues=lookup_issues, unanswered=unanswered
+    )
+    if total_pairs and len(unanswered) == total_pairs:
+        return _write_failed(
+            out,
+            graph_db,
+            selected,
+            per_eco_counts,
+            total_pairs,
+            ",".join(sorted(lookup_issues)) or "error",
+            "no (name, version) pair was answered",
+        )
     print(f"[+] {len(hits)} vulnerability records hit the fleet", file=sys.stderr)
 
-    details = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=16) as ex:
-        for vid, v in zip(hits, ex.map(_fetch_vuln, list(hits)), strict=False):
-            if v:
-                details[vid] = v
+    details, detail_issues = client.get_vulns(list(hits))
+    lookup_issues.update(detail_issues)
+    degraded = bool(lookup_issues)
+    if degraded:
+        print(
+            f"WARNING: degraded sweep — {len(unanswered)} (name, version) pair(s) unanswered, "
+            f"{sum(detail_issues.values())} advisory detail(s) missing: "
+            + " ".join(f"{k}:{v}" for k, v in sorted(lookup_issues.items()))
+            + " — unanswered pairs are NOT clean",
+            file=sys.stderr,
+        )
     by_cve = dedupe_by_cve(details)
     bands = Counter(sev_band(d, is_malicious(vid, d)) for vid, d in by_cve.values())
     malicious_count = sum(1 for vid, d in by_cve.values() if is_malicious(vid, d))
@@ -734,6 +821,13 @@ def main(argv=None, post=_post_batch) -> int:
         "graph_only_ecosystems": sorted(graph_only),
         "pairs_by_ecosystem": per_eco_counts,
         "pairs_queried": total_pairs,
+        "status": "degraded" if degraded else "complete",
+        "lookup_issues": dict(sorted(lookup_issues.items())),
+        "pairs_unanswered": len(unanswered),
+        "advisory_details_missing": sum(detail_issues.values()),
+        # the unanswered pairs themselves, so a re-run or a reader can see
+        # exactly which declarations were never checked
+        "unanswered_pairs": [list(p) for p in sorted(unanswered)],
         "distinct_advisories": len(by_cve),
         "distinct_cves": len(by_cve),
         "malicious_advisories": malicious_count,
@@ -756,7 +850,7 @@ def main(argv=None, post=_post_batch) -> int:
         f"{len(rejected)} rejected inputs)",
         file=sys.stderr,
     )
-    return 0
+    return 3 if degraded else 0
 
 
 if __name__ == "__main__":

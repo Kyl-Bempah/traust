@@ -1,44 +1,38 @@
-"""Compliance test paths — via the config loader (same as production)."""
+"""Compliance test paths.
+
+The control-to-check mapping ships with traust-engine; the per-check and
+efficacy fixtures are synthetic and live in this repo's tests/fixtures; the
+org parameters are deployment config, read from the config home (the suite's
+home carries a labeled-fiction copy).
+"""
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-from traust_contracts.config import load_section
+from traust_contracts import config_path
+from traust_engine.assets import compliance_data_dir
 
-from traust.context import load_engine, progress_tracker_dir
+from traust.paths import HARNESS_ROOT
 
 REGISTRY = "compliance-mapping.yaml"
+FIXTURES = Path(__file__).parent / "fixtures" / "compliance"
 
 
-def compliance_configs_dir() -> Path:
-    """``<configured progress_tracker>/configs/compliance`` for the test suite."""
-    return progress_tracker_dir(load_engine()) / "configs" / "compliance"
+def compliance_registry() -> Path:
+    """The shipped control-to-check mapping."""
+    return compliance_data_dir() / REGISTRY
 
 
-def compliance_configs_available() -> bool:
-    return (compliance_configs_dir() / REGISTRY).is_file()
+def compliance_fixtures_dir() -> Path:
+    """Root that each check's `fixtures:` path is relative to."""
+    return FIXTURES
 
 
-def _operator_config_home() -> Path | None:
-    raw = os.environ.get("TRAUST_OPERATOR_CONFIG_HOME")
-    return Path(raw) if raw else None
+def org_parameters() -> Path:
+    """org-parameters.yaml from the config home (the suite's fixture copy)."""
+    return config_path("org-parameters.yaml")
 
 
-def compliance_skip_reason() -> str:
-    """Explain why compliance tests are skipped (operator config, not test home)."""
-    home = _operator_config_home()
-    if home is None:
-        return "no traust config home (~/.traust/config) — run scripts/install_traust"
-    loc_file = home / "locations.yaml"
-    if not loc_file.is_file():
-        return f"{loc_file} missing"
-    locs = load_section("locations.yaml", config_home=home, required=False)
-    if locs is None or not locs.progress_tracker:
-        return "set progress_tracker in ~/.traust/config/locations.yaml"
-    pt = Path(locs.progress_tracker)
-    reg = pt / "configs" / "compliance" / REGISTRY
-    if not reg.is_file():
-        return f"compliance registry missing under configured progress_tracker ({pt})"
-    return "progress-tracker compliance configs unavailable"
+def org_parameters_template() -> Path:
+    return HARNESS_ROOT / "config" / "org-parameters.example.yaml"

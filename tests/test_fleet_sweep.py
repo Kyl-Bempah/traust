@@ -664,3 +664,145 @@ def test_verify_worklist_passes_non_malicious_rows_through():
     assert refuted == []
     assert len(kept) == 1
     assert "verification" not in kept[0]
+
+
+# --------------------------------------------------------------------------
+# Shared OSV client: unanswered lookups are counted, never read as clean
+# --------------------------------------------------------------------------
+
+
+class _FailingClient:
+    """Shared-client fake: every lookup fails as unreachable."""
+
+    def query_batch(self, queries):
+        from collections import Counter
+
+        from traust_engine.osv import BatchOutcome
+
+        return BatchOutcome([None] * len(queries), Counter({"unreachable": len(queries)}))
+
+    def get_vulns(self, ids):
+        from collections import Counter
+
+        return {}, Counter()
+
+
+def test_query_osv_multi_counts_unanswered_pairs():
+    from collections import Counter
+
+    issues, unanswered = Counter(), []
+    hits = fs.query_osv_multi(
+        {"npm": {("@scope/x", "1.2.3"): {"repo:b"}}},
+        jobs=1,
+        client=_FailingClient(),
+        issues=issues,
+        unanswered=unanswered,
+    )
+    assert hits == {}
+    assert issues == {"unreachable": 1}
+    assert unanswered == [("npm", "@scope/x", "1.2.3")]
+
+
+def test_no_pair_answered_is_a_failed_sweep_exit_2(tmp_path, capsys):
+    db = _seed_db_with_graph_only(tmp_path)
+    out = tmp_path / "wl-failed.json"
+    rc = fs.main(
+        ["--graph-db", str(db), "--out", str(out), "--ecosystem", "all"], client=_FailingClient()
+    )
+    assert rc == 2
+    doc = json.loads(out.read_text())
+    assert doc["status"] == "failed"
+    assert doc["failure"]["status"] == "unreachable"
+    assert doc["pairs_unanswered"] == doc["pairs_queried"] > 0
+    assert doc["worklist"] == []
+    assert "NOT a clean sweep" in capsys.readouterr().err
+
+
+def _seed_two_npm_pairs(tmp_path: Path) -> Path:
+    db = tmp_path / "graph3.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE edges (src TEXT, dst TEXT, rel TEXT, attrs TEXT)")
+    con.executemany(
+        "INSERT INTO edges (src, dst, rel, attrs) VALUES (?, ?, ?, ?)",
+        [
+            (
+                "repo:a",
+                "pkg:npm/lodash",
+                "depends_on",
+                '{"version": "4.17.20", "ecosystem": "npm"}',
+            ),
+            (
+                "repo:b",
+                "pkg:npm/left-pad",
+                "depends_on",
+                '{"version": "1.3.0", "ecosystem": "npm"}',
+            ),
+        ],
+    )
+    con.commit()
+    con.close()
+    return db
+
+
+class _HalfClient(_FailingClient):
+    """The first lookup answers (no advisories); the rest fail as unreachable."""
+
+    def query_batch(self, queries):
+        from collections import Counter
+
+        from traust_engine.osv import BatchOutcome
+
+        ids = [[]] + [None] * (len(queries) - 1)
+        return BatchOutcome(ids, Counter({"unreachable": len(queries) - 1}))
+
+
+def test_some_pairs_unanswered_is_a_degraded_sweep_exit_3(tmp_path, capsys):
+    out = tmp_path / "wl-degraded.json"
+    rc = fs.main(
+        ["--graph-db", str(_seed_two_npm_pairs(tmp_path)), "--out", str(out)], client=_HalfClient()
+    )
+    assert rc == 3
+    doc = json.loads(out.read_text())
+    assert doc["status"] == "degraded"
+    assert doc["pairs_unanswered"] == 1
+    assert doc["lookup_issues"] == {"unreachable": 1}
+    assert doc["unanswered_pairs"]
+    assert "NOT clean" in capsys.readouterr().err
+
+
+def test_a_failed_probe_stops_the_sweep(tmp_path):
+    class Down(_FailingClient):
+        def probe(self, query):
+            return "unreachable", "URLError reaching https://osv.test/v1/query"
+
+        def query_batch(self, queries):  # pragma: no cover - must not be reached
+            raise AssertionError("a failed probe must stop the sweep")
+
+    out = tmp_path / "wl.json"
+    rc = fs.main(
+        ["--graph-db", str(_seed_two_npm_pairs(tmp_path)), "--out", str(out)], client=Down()
+    )
+    assert rc == 2
+    assert json.loads(out.read_text())["failure"]["detail"].startswith("URLError")
+
+
+def test_air_gapped_access_does_not_sweep(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(fs, "osv_access", lambda: "air-gapped")
+    monkeypatch.setattr(
+        fs, "_default_client", lambda jobs: (_ for _ in ()).throw(AssertionError("no API"))
+    )
+    out = tmp_path / "wl.json"
+    rc = fs.main(["--graph-db", str(_seed_two_npm_pairs(tmp_path)), "--out", str(out)])
+    assert rc == 2
+    doc = json.loads(out.read_text())
+    assert doc["status"] == "failed"
+    assert doc["failure"]["status"] == "air-gapped"
+
+
+def test_a_complete_sweep_says_so(tmp_path):
+    db = _seed_db_with_graph_only(tmp_path)
+    out = tmp_path / "wl-ok.json"
+    assert fs.main(["--graph-db", str(db), "--out", str(out)], post=_RecordingPost()) == 0
+    doc = json.loads(out.read_text())
+    assert doc["status"] == "complete"
+    assert doc["pairs_unanswered"] == 0

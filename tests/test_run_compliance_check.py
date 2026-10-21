@@ -11,20 +11,11 @@ from traust.paths import skill_dir
 yaml = pytest.importorskip("yaml")
 pytest.importorskip("jsonschema")
 
-from tests.compliance_paths import (
-    compliance_configs_available,
-    compliance_configs_dir,
-    compliance_skip_reason,
-)
-
-_CONFIGS = compliance_configs_dir
+from tests.compliance_paths import compliance_fixtures_dir
 
 
 def _check_fixtures_dir():
-    return compliance_configs_dir() / "fixtures"
-
-
-pytestmark = pytest.mark.skipif(not compliance_configs_available(), reason=compliance_skip_reason())
+    return compliance_fixtures_dir() / "fixtures"
 
 
 def _load(name):

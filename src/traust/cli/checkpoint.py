@@ -230,7 +230,10 @@ def cmd_reset(argv: list[str]) -> int:
     d = _confine(argv[0], must_end="-state")
     if d.exists():
         shutil.rmtree(d)
-        print(f"checkpoint: removed {d}/")
+    # A fresh, empty state dir: steps that write into it before the first
+    # `save` (a pre-scan seed, for example) must not fail on a missing dir.
+    d.mkdir(parents=True)
+    print(f"checkpoint: reset {d}/")
     return 0
 
 

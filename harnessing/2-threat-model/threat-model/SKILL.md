@@ -106,7 +106,7 @@ user about the migration, and targets the new name from then on.
 runtime as "Base directory for this skill"; it is
 `traust/harnessing/2-threat-model/threat-model` — `interview.md`,
 `bootstrap.md`, `review.md`, `pr.md`, and `schema.md` live there). `<harness>` is the
-traust repo root, i.e. `<skill-base>/../..`; checkpoint I/O
+traust repo root, i.e. `<skill-base>/../../..`; checkpoint I/O
 uses `python3 -m traust.cli admin checkpoint`. Resolve both to absolute
 paths once at startup.
 
@@ -355,6 +355,19 @@ technique fits — it is part of the schema and `/attack-coverage` reads
 it as modeled coverage. An empty array is valid when none fits; never
 guess. IDs are validated against the harness's pinned ATT&CK table.
 
+**Review-surface tags.** New emissions tag each threat, each entry
+point and each section 5 row that sets aside a threat on a surface with
+`review_surfaces`: the surfaces from
+[review-surfaces.md](../../3-audit/secure-code-audit/review-surfaces.md)
+it sits on. For example, a token verifier entry point is
+`["credential-acceptance"]`, and a webhook that fetches a user-supplied URL
+is `["outbound-fetch"]`. Leave the field out when none applies; never pad
+it. The audit's threat-model coverage diff reads these tags to map
+modelled threats to its `review_surface_coverage` record, so an untagged
+threat on a surface goes unmapped. A tagged section 5 row records that the
+surface was checked and the threat set aside, which is a different claim
+from never tagging the surface.
+
 **Findings-tree placement (wiring contract, 2026-07-31).** The checkout
 copy alone is invisible to every downstream consumer — `/secure-code-audit`
 (coverage diff), `/vuln-scan`, `/triage`, `/threat-register`, and
@@ -450,7 +463,9 @@ copy by contract, both forms in both places.
 The **Markdown** is consumed by `/secure-code-audit` (coverage diff),
 `/vuln-scan` (focus areas), `/triage` (environment context),
 `/threat-register` (portfolio rollup), and `/attack-coverage`
-(attack_refs).
+(attack_refs). `/secure-code-audit` reads the `review_surfaces` tags from
+the JSON, the source; the rendering repeats them as a trailing column in
+sections 3, 4 and 5.
 
 The **JSON** is the contract artifact, and its consumer is the storage
 layer rather than another skill: `traust_engine.corpus.store_ingest`

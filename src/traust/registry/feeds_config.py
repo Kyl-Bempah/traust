@@ -86,6 +86,12 @@ def _load_raw(path: Path | None = None) -> dict:
     return doc
 
 
+# How a live source is reached. `api` is the default; `air-gapped` (osv only)
+# swaps the API for an adopter-provided offline tool and database;
+# `disabled` (deps_dev) opts out of the source.
+ACCESS_MODES = ("api", "air-gapped", "disabled")
+
+
 def _validate(sid: str, spec: dict) -> None:
     tier = spec.get("tier")
     if tier not in ("cached", "live"):
@@ -106,6 +112,11 @@ def _validate(sid: str, spec: dict) -> None:
                 raise FeedsConfigError(f"source {sid!r}: cached mode {mode!r} requires {key!r}")
     elif not spec.get("url_template"):
         raise FeedsConfigError(f"source {sid!r}: live sources require `url_template`")
+    if spec.get("access", "api") not in ACCESS_MODES:
+        raise FeedsConfigError(
+            f"source {sid!r}: access must be one of {', '.join(ACCESS_MODES)}, "
+            f"got {spec.get('access')!r}"
+        )
 
 
 def load(path: Path | None = None) -> dict[str, dict]:

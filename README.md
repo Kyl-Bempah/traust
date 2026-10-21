@@ -4,7 +4,7 @@
 
 Traust is an AI-native workflow engine for the automated security assessment of software. It equips adopters with a structured methodology to run consistent, repeatable multi-framework audits across repositories that include source code, container images, RPM packages, Kubernetes operators, or infrastructure as code (IaC). It provides machine triage of findings and live validation of exploits to drive remediation, recording every event in a signed, tamper-evident ledger. Traust is built to simplify the process of application security, with the ability to scale to hundreds of repositories across dozens of product releases if needed.
 
-This repository holds the skills and source code that drive the workflow engine. Traust is agent-agnostic in principle, with current implementations for Claude Code and Crush. Developed by Red Hat's Hybrid Platforms team and published under Apache License 2.0.
+This repository holds Traust's agent-facing security skills, slash commands, CLI entry points, and workflow policy. Shared platform capabilities are being consolidated in [traust-core](https://github.com/traust-security/traust-core); adoption by the existing components is in progress. Traust is agent-agnostic in principle, with current implementations for Claude Code and Crush. Developed by Red Hat's Hybrid Platforms team and published under Apache License 2.0.
 
 ## Quick start
 
@@ -49,27 +49,22 @@ Findings interchange is standards-based in both directions: `/triage` imports **
 
 ## Components
 
-This repository is the **agent-facing layer** of a five-component stack, not the whole system. It contains the skills, slash commands and CLIs of the stack. The engine, ledger, contracts, and SDK are separately versioned repositories installed as pip dependencies pinned by git tag.
+Traust separates security workflow policy, deterministic processing, shared platform capabilities, ledger operations, and data contracts into dedicated repositories.
 
-```
-  traust     skills, slash commands, agent-facing CLIs   ← this repo
-        ▼
-  traust-engine          scanner adapters, corpus, metrics, reporting, validation
-        ▼
-  traust-ledger             finding identity, Merkle integrity, signing, ledger writes
-        ▼
-  traust-contracts   schemas · enums · shared models             (leaf)
+| Repository | Responsibility |
+|---|---|
+| **traust** (this repo) | Security skills, prompts, slash commands, CLI entry points, and workflow policy |
+| **[traust-core](https://github.com/traust-security/traust-core)** | Shared Python platform API (`traust_core.v1`): domain models, repositories, services, artifact publishing, configuration/context, and provider interfaces; migration in progress |
+| **[traust-engine](https://github.com/traust-security/traust-engine)** | Existing deterministic processing: scanner adapters, corpus processing, reporting, metrics, and validation |
+| **[traust-ledger](https://github.com/traust-security/traust-ledger)** | Finding identity, signed event history, Merkle integrity, signing, verification, and ledger entry points |
+| **[traust-contracts](https://github.com/traust-security/traust-contracts)** | Canonical artifact/config schemas, controlled vocabularies, shared bindings, and database DDL |
+| **[traust-sdk](https://github.com/traust-security/traust-sdk)** | Go-facing integration and typed access; a sibling consumer, not a dependency of the Python harness |
 
-  traust-sdk (Go)    typed SDK for non-Python consumers — imports the contracts,
-                          calls the workflow engine; not a dependency of it
-```
+**Current integration:** the harness installs `traust-engine`, `traust-ledger`, and `traust-contracts`. These components do not yet declare a dependency on `traust-core`. Core's repositories are implemented, but its domain services are mostly stubs; see its [implementation status](https://github.com/traust-security/traust-core#domain-services-stubs). The intended direction is for execution and CLI adapters to call shared core services, with security workflow policy remaining here. The core REST API route for non-Python consumers is planned, not an available SDK integration.
 
-- [traust-engine](https://github.com/traust-security/traust-engine)
-- [traust-ledger](https://github.com/traust-security/traust-ledger)
-- [traust-contracts](https://github.com/traust-security/traust-contracts)
-- [traust-sdk](https://github.com/traust-security/traust-sdk)
+**Contracts defines data; core supplies shared access and behavior.** A schema, enum, or DDL change belongs in `traust-contracts`, not in this repository. The installed contracts revision determines its resource layout; do not hard-code paths from a different revision.
 
-**A schema or enum change belongs in `traust-contracts`, not here** — there is no local `schemas/` directory; the `schemas/v1/…` paths resolve inside the installed contracts package. Which repo to change for a given fix, how git-tag pinning works (and the `uv lock` "conflicting URLs" failure it produces when pins disagree), and the bottom-up release order: **[docs/components.md](docs/components.md)**.
+Python code dependencies are pinned by commit `rev` in `pyproject.toml` and resolved in `uv.lock`. Component ownership, current dependencies, migration boundaries, and dependency update order: **[docs/components.md](docs/components.md)**.
 
 ## Documentation
 
@@ -83,11 +78,14 @@ This repository is the **agent-facing layer** of a five-component stack, not the
 | [docs/skills.md](docs/skills.md) | All 52 skills: stage, tier, slash command |
 | [docs/artifacts.md](docs/artifacts.md) | Every artifact the pipeline produces and who consumes it |
 | [docs/components.md](docs/components.md) | Which repo to change for a given fix |
+| [traust-core platform API](https://github.com/traust-security/traust-core) | Shared models, persistence, services, and implementation status |
 | [PROCESS.md](PROCESS.md) | Full 9-stage campaign workflow |
 
 ## Versioning
 
 The workflow engine is versioned via the `VERSION` file using semantic versioning (`MAJOR.MINOR.PATCH`). At report time, the short git SHA is appended (e.g. `0.32.1-4dd9796`). See `AGENTS.md` for bump guidelines.
+
+Dependency pins are separate from the harness release version: `[tool.uv.sources]` selects git commits, not release tags. Core's `traust_core.v1` namespace is an evolving API, not a guarantee that every domain service is implemented or frozen; core documents commit-based consumption rather than tagged releases.
 
 ## Security and authorisation
 
