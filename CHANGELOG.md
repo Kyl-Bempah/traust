@@ -2,6 +2,16 @@
 
 All notable changes to Traust are documented here.
 
+## [0.34.2]
+
+- **Pins traust-engine 0.37.1 (88c8065): `go.mod` `replace` directives
+  are honoured** in the dependency pre-scan.
+  - Requires replaced with a directory in the checkout are the project's
+    own modules and are no longer reported. On etcd that removes 3 false
+    positives.
+  - Requires replaced with another module or version query what actually
+    builds.
+
 ## [0.34.1]
 
 - **Test and dev dependencies are tagged, never skipped** (owner decision
