@@ -325,8 +325,20 @@ OSV_SCANNER_OK_EXITS = (0, 1, 128)
 
 
 def add_osv_args(ap) -> None:
-    ap.add_argument("--repo", required=True, type=Path, help="Target checkout")
-    ap.add_argument("--out", type=Path, help="Output JSON (default: <repo>-osv.json)")
+    target = ap.add_mutually_exclusive_group(required=True)
+    target.add_argument("--repo", type=Path, help="Target checkout (lockfiles and manifests)")
+    target.add_argument(
+        "--sbom",
+        type=Path,
+        help="syft JSON SBOM of a container image (syft -o syft-json): its language "
+        "packages not installed by an OS package; OS packages stay with grype",
+    )
+    ap.add_argument(
+        "--grype",
+        type=Path,
+        help="With --sbom: grype JSON for the same SBOM, to tag also_in_grype",
+    )
+    ap.add_argument("--out", type=Path, help="Output JSON (default: <repo-or-sbom>-osv.json)")
     ap.add_argument("--timeout", type=int, default=60, help="Per-request timeout, seconds")
     ap.add_argument(
         "--source",
@@ -386,17 +398,59 @@ def _failed_binary_doc(detail: str) -> dict:
     }
 
 
+def _sbom_body(args, source: str) -> dict:
+    """An image's language packages: OSV API, or osv-scanner offline when air-gapped."""
+    import tempfile
+
+    from traust_engine.adapters import osv_sbom
+    from traust_engine.osv import OsvClient
+
+    from traust.registry.osv_urls import osv_query_url
+
+    doc = osv_sbom.load_syft(args.sbom)
+    if source == "api":
+        return osv_sbom.scan_sbom(doc, OsvClient(osv_query_url(), timeout=args.timeout))
+    packages, stats = osv_sbom.collect_sbom_packages(doc)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            cdx = osv_sbom.write_cyclonedx(packages, Path(tmp) / "packages.cdx.json")
+            proc, invocation = osv_sbom.run_offline(args.osv_scanner, cdx, max(args.timeout, 600))
+        if proc.returncode not in OSV_SCANNER_OK_EXITS or not proc.stdout.strip().startswith("{"):
+            errors = [
+                ln for ln in (proc.stderr or "").splitlines() if "rror" in ln or "unable" in ln
+            ]
+            raise RuntimeError(
+                f"osv-scanner failed (exit {proc.returncode}): "
+                + ("; ".join(errors[:3]) or (proc.stderr or "").strip()[-500:])
+            )
+        body = {
+            "provenance": {"source": "osv-scanner", "invocation": invocation, "status": "complete"},
+            "candidates": osv_sbom.parse_offline(json.loads(proc.stdout), packages),
+        }
+    except FileNotFoundError:
+        body = _failed_binary_doc(f"osv-scanner not found ({args.osv_scanner}): {AIR_GAPPED_HELP}")
+    except (subprocess.TimeoutExpired, RuntimeError) as e:
+        body = _failed_binary_doc(f"{e} — {AIR_GAPPED_HELP}")
+    osv_sbom._with_stats(body["provenance"], stats, doc)
+    return body
+
+
 def call_osv(_engine, args) -> int:
     from traust_engine.adapters import osv as osv_mod
     from traust_engine.osv import OsvClient
 
     from traust.registry.osv_urls import osv_access, osv_query_url
 
+    source = args.source or ("osv-scanner" if osv_access() == "air-gapped" else "api")
+    if args.sbom is not None:
+        return _call_osv_sbom(args, source)
+    if args.grype is not None:
+        print("--grype applies to --sbom only", file=sys.stderr)
+        return 2
     repo = args.repo.resolve()
     if not repo.is_dir():
         print(f"not a directory: {repo}", file=sys.stderr)
         return 2
-    source = args.source or ("osv-scanner" if osv_access() == "air-gapped" else "api")
     if source == "osv-scanner":
         try:
             body = _osv_binary_doc(args, repo)
@@ -419,6 +473,74 @@ def call_osv(_engine, args) -> int:
         "candidates": body["candidates"],
     }
     out = args.out or Path.cwd() / f"{repo.name}-osv.json"
+    return _write_osv_doc(doc, out)
+
+
+def _call_osv_sbom(args, source: str) -> int:
+    from traust_engine.adapters import osv_sbom
+
+    sbom = args.sbom.resolve()
+    if not sbom.is_file():
+        print(f"not a file: {sbom}", file=sys.stderr)
+        return 2
+    try:
+        body = _sbom_body(args, source)
+    except (osv_sbom.SbomFormatError, json.JSONDecodeError) as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 2
+    prov = body["provenance"]
+    grype_os_installed = None
+    if args.grype is not None:
+        try:
+            grype_doc = json.loads(args.grype.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"ERROR: cannot read --grype {args.grype}: {e}", file=sys.stderr)
+            return 2
+        # grype's own matches on OS-installed language packages: listed even
+        # when the OSV lookup failed, since they come from grype and the SBOM
+        grype_os_installed = osv_sbom.grype_os_installed_matches(
+            grype_doc, osv_sbom.load_syft(args.sbom)
+        )
+        prov["grype_os_installed_matches"] = len(grype_os_installed)
+        if prov.get("status") != "failed":
+            prov["grype_dedupe"] = osv_sbom.mark_grype_duplicates(body["candidates"], grype_doc)
+    doc = {
+        "metadata": {
+            "artifact": "osv-dependency-candidates",
+            "sbom": str(sbom),
+            "harness_version": harness_version(),
+            **prov,
+        },
+        "candidates": body["candidates"],
+    }
+    if grype_os_installed is not None:
+        doc["grype_os_installed"] = grype_os_installed
+    stem = sbom.name.removesuffix(".json").removesuffix(".syft")
+    out = args.out or Path.cwd() / f"{stem}-osv.json"
+    rc = _write_osv_doc(doc, out)
+    if grype_os_installed:
+        print(
+            f"NOTE: {len(grype_os_installed)} grype match(es) are on language packages an OS "
+            "package installed (listed under grype_os_installed): judge them by the owning "
+            "package's advisory state, not the upstream advisory",
+            file=sys.stderr,
+        )
+    if prov.get("status") != "failed":
+        print(
+            f"osv: {prov.get('skipped_os_installed', 0)} OS-installed language package(s) left to "
+            "grype (Red Hat/distribution data); "
+            + (
+                f"{prov['grype_dedupe']['osv_only']} candidate(s) not reported by grype"
+                if prov.get("grype_dedupe")
+                else "no --grype given: duplicates of grype matches not marked"
+            ),
+            file=sys.stderr,
+        )
+    return rc
+
+
+def _write_osv_doc(doc: dict, out: Path) -> int:
+    prov = doc["metadata"]
     out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     if prov.get("status") == "failed":
         failure = prov.get("failure") or {}
@@ -430,7 +552,7 @@ def call_osv(_engine, args) -> int:
             file=sys.stderr,
         )
         return 2
-    print(f"osv: {len(body['candidates'])} candidate(s) → {out}")
+    print(f"osv: {len(doc['candidates'])} candidate(s) → {out}")
     if prov.get("transitive_coverage") == "partial":
         print(
             f"NOTE: {len(prov.get('unresolved_manifests') or [])} manifest(s) have no lockfile: "

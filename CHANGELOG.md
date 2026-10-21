@@ -2,6 +2,35 @@
 
 All notable changes to Traust are documented here.
 
+## [0.33.0]
+
+- **Container audits: grype reads syft JSON, and OSV adds language-package
+  advisories** (owner decisions 2026-10-20, option b plus fixes A and B).
+  Pins traust-engine 0.35.0 (f9259ad).
+  - **Fixed: grype ran on CycloneDX**, which drops syft's record of which
+    OS package installed each file. grype then matched upstream advisories
+    against language packages an RPM installed, which carry Red Hat
+    backports. On `ubi9/python-311` that added 31 likely false positives
+    (13 High). `/secure-container-audit` Phase 2 now writes syft JSON and
+    CycloneDX in one syft run; Phase 3 runs grype on the syft JSON. The
+    CycloneDX file still feeds the portfolio graph.
+  - **`traust adapters osv --sbom <syft.json> [--grype <grype.json>]`**
+    looks up the image's language packages that no OS package installed,
+    through the OSV API (osv-scanner offline when air-gapped). It tags
+    `also_in_grype` and reports `grype_dedupe` counts, with the same
+    `complete` / `degraded` (exit 3) / `failed` (exit 2) statuses.
+    CycloneDX input is refused (exit 2).
+  - **grype's own matches on OS-installed language packages are listed**
+    (`grype_os_installed`, with the owning packages). Even from syft JSON,
+    grype reported 26 of them on `ubi9/python-311` (1 critical, 12 high,
+    mostly npm packages the nodejs RPM ships). The skill records them as
+    `installed by <owner>` and never promotes one on the upstream advisory
+    alone.
+  - `/secure-container-audit` Phase 3: grype stays primary. Only
+    `also_in_grype: false` candidates become new `dependency_audit`
+    entries; failures are a coverage gap under `osv-scanner`. A language
+    package an RPM installed is judged by the RPM's RHSA state.
+
 ## [0.32.1]
 
 - **The dependency pre-scan's report key is `osv-scanner` again.** 0.31.0
