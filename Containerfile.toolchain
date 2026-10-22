@@ -4,8 +4,8 @@
 # stack (traust-engine + contracts + traust-ledger + traust), and
 # harness skill data. SCI k8s jobs and CI runners pull this and go.
 #
-# Build (always use the wrapper — it reads pins from external-tools.yaml
-# and pre-builds Python wheels from sibling repos):
+# Build (always use the wrapper — it reads scanner pins from external-tools.yaml
+# and builds Python dependencies from the pyproject.toml pins):
 #   ./scripts/build-toolchain-image.sh
 #   ./scripts/build-toolchain-image.sh --tag myregistry/harness-toolchain:v0.331
 #   ./scripts/build-toolchain-image.sh --no-db
@@ -102,7 +102,7 @@ RUN python3.11 -m pip install --no-cache-dir "pip-audit==${PIP_AUDIT_VERSION}"
 # should extend this image or use the impact profile separately.
 
 # --- Python stack: harness engine + contracts + traust-ledger + harness CLI ---
-# The build script pre-builds pure-Python wheels from sibling repos into _build/wheels/.
+# The build script builds pinned dependency wheels from pyproject.toml.
 # Native deps (from requirements.txt) are installed from PyPI inside the container.
 COPY requirements.txt /tmp/requirements.txt
 RUN python3.11 -m pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
@@ -127,15 +127,17 @@ RUN if [ "$SKIP_DB" = "0" ]; then \
       grype db update || true; \
     fi
 
-# --- Smoke test: verify all tools resolve ---
-RUN opengrep --version && \
+# --- Smoke test: check Python dependencies, ledger auth, and tool versions ---
+RUN python3.11 -m pip check && \
+    python3.11 -c "import traust_ledger.auth.directory" && \
+    opengrep --version && \
     gitleaks version && \
     syft --version && \
     grype --version && \
     cosign version && \
     govulncheck -version && \
     skopeo --version && \
-    echo "All tools verified on PATH"
+    echo "Python dependencies and tools verified"
 
 USER 1001
 WORKDIR /workspace

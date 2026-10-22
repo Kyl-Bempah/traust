@@ -239,8 +239,12 @@ on `PATH` with databases pre-populated. osv-scanner is the exception: an
 air-gapped deployment extends the image with osv-scanner and its offline
 database ([Air-gapped OSV scanning](#air-gapped-osv-scanning)):
 
+The build fetches Python packages at the commit SHAs in `pyproject.toml`; sibling
+repositories are not required. Scanner versions still come from
+`config/external-tools.yaml`.
+
 ```bash
-./scripts/build-toolchain-image.sh                       # pins come from the manifest
+./scripts/build-toolchain-image.sh                       # scanner manifest + Python commit pins
 ./scripts/build-toolchain-image.sh --tag <registry>/harness-toolchain:<tag>
 
 podman run --rm -v "$PWD":/workspace:Z harness-toolchain:latest \

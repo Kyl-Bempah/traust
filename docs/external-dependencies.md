@@ -31,9 +31,9 @@ packages, and `harnessing/`.
 
 | Package | Used by | License | Evidence | Notes |
 |---|---|---|---|---|
-| `traust-engine` | processing core — validators, scanners, reporting, impact analysis (`traust_engine.*`) | Same license as this harness | sibling repository, installed from its git tag via `[tool.uv.sources]` | Not a third-party licensing surface |
-| `traust-contracts` | contract surface — bundled JSON schemas, shared enums, identity vectors | Same license as this harness | sibling repository, installed from its git tag via `[tool.uv.sources]` | Not a third-party licensing surface |
-| `traust-ledger` | disposition-ledger kernel — finding identity, Merkle integrity, signing | Same license as this harness | sibling repository, installed from its git tag via `[tool.uv.sources]` | Not a third-party licensing surface |
+| `traust-engine` | processing core — validators, scanners, reporting, impact analysis (`traust_engine.*`) | Same license as this harness | Git source pinned to a commit in `pyproject.toml` via `[tool.uv.sources]` | Not a third-party licensing surface |
+| `traust-contracts` | contract surface — bundled JSON schemas, shared enums, identity vectors | Same license as this harness | Git source pinned to a commit in `pyproject.toml` via `[tool.uv.sources]` | Not a third-party licensing surface |
+| `traust-ledger` | disposition-ledger kernel — finding identity, Merkle integrity, signing | Same license as this harness | Git source pinned to a commit in `pyproject.toml` via `[tool.uv.sources]` | Not a third-party licensing surface |
 | `jsonschema` | all validators | MIT | [PyPI](https://pypi.org/pypi/jsonschema/json) | Permissive |
 | `referencing` | schema registry for the validators | MIT | [PyPI](https://pypi.org/pypi/referencing/json) | Permissive |
 | `pyyaml` | config, scope and targets parsing | MIT | [PyPI](https://pypi.org/pypi/PyYAML/json) | Permissive |

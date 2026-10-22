@@ -2,6 +2,13 @@
 
 All notable changes to Traust are documented here.
 
+## [Unreleased]
+
+- Toolchain images build Python dependency wheels from the commit SHAs in
+  `pyproject.toml`, without sibling checkouts. The image includes the required
+  contracts/ledger runtime dependencies and checks package consistency plus a
+  ledger auth import during the build.
+
 ## [0.34.2]
 
 - **Pins traust-engine 0.37.1 (88c8065): `go.mod` `replace` directives
