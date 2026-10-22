@@ -41,7 +41,7 @@ Everything else in this document follows from six decisions:
 
 2. **Events, not state.** The ledger stores *what happened*; the current
    disposition is computed by pure code
-   (`src/traust/cli/build_cumulative.py`). The model gathers
+   (build_cumulative.py (retired with the traust-core hub)). The model gathers
    and interprets sources; deterministic code decides state. Ten reruns
    give ten identical outputs, so dashboards are reproducible and
    arguments about "what the number was" have a mechanical answer.
@@ -861,7 +861,7 @@ touchpoint — lives in the `## Integrations` section of
 | Triage → ledger wiring (verdict → event mapping, emitter) | §6b; `src/traust/cli/emit_triage_ledger_events.py` |
 | λ weight table (versioned, owner-tunable) | `$TRAUST_CONFIG_HOME/hardening-risk-weights.json` (§7a) |
 | Whole-pipeline map (artifacts, producers, consumers) | [artifacts.md](artifacts.md) |
-| Merge engine (the derivation code) | `src/traust/cli/build_cumulative.py` |
+| Merge engine (the derivation code) | build_cumulative.py (retired with the traust-core hub) |
 | Trend replay | `harnessing/findings-trends/scripts/build_trends.py` |
 | Fingerprint recipe, `ALGO_VERSION`, strict mode, what identity is *not* | `traust-ledger/docs/finding-identity.md` (beside `traust_ledger/_internal/identity.py`) |
 | Schemas | `schemas/v1/layer.schema.json`, `schemas/v1/report.schema.json` |

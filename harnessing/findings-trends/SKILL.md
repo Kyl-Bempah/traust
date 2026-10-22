@@ -8,6 +8,8 @@ metadata:
 
 # Findings Trends
 
+> **Being ported to traust-core** (progress-tracker skill port 39, findings-trends): build_trends.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
+
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
 > `$TRAUST_CONFIG_HOME` (`docs/setup.md`, Storage locations); substitute your
@@ -31,7 +33,7 @@ weekly) boundaries and reports the direction of every metric.
 ## Invocation
 
 ```
-python3 harnessing/findings-trends/scripts/build_trends.py $ARGUMENTS
+python3 RETIRED:build_trends.py $ARGUMENTS
     [--results-root DIR]        # default ../analysis-results
     [--granularity month|week]  # default month
     [--since YYYY-MM]

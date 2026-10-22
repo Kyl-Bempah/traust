@@ -9,7 +9,6 @@ allowed-tools:
   - Grep
   - Write
   - Bash(python3 *traust* -m traust_engine.sweep.mining:*)
-  - Bash(python3 *traust/harnessing/mine-ledger/scripts/emit_rule_drafts.py:*)
   - Bash(python3 *traust* -m traust.cli sweep:*)
   - Bash(python3 *traust* -m traust.cli sweep rule-lane:*)
   # Confinement added 2026-07-31 (P1 gate rework — the
@@ -19,6 +18,8 @@ allowed-tools:
 ---
 
 # Mine Ledger
+
+> **Being ported to traust-core** (progress-tracker skill port 34, mine-ledger): emit_rule_drafts.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
@@ -119,10 +120,10 @@ drafts, author, verify, promote:
 
 ```bash
 # 1. stage drafts (deterministic; identical pairs skipped)
-python3 harnessing/mine-ledger/scripts/emit_rule_drafts.py --results-root ../analysis-results \
+python3 RETIRED:emit_rule_drafts.py --results-root ../analysis-results \
     [--cwe CWE-494] [--limit 6]
 # 2. author patterns: in the draft's rule.skeleton.yaml so that
-python3 harnessing/mine-ledger/scripts/emit_rule_drafts.py \
+python3 RETIRED:emit_rule_drafts.py \
     --verify harnessing/mine-ledger/rule-drafts/<draft> \
     --rule   harnessing/mine-ledger/rule-drafts/<draft>/rule.skeleton.yaml
 # passes (before/ fires, after/ silent)

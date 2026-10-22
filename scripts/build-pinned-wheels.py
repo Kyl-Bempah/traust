@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build the pinned Traust Python dependencies as wheels."""
+"""Build the pinned Traust Python dependencies as wheels, at the commits uv.lock resolved.
+
+traust pins traust-core and traust-engine; traust-contracts and traust-ledger come
+through traust-core's pins, so every revision is read from the lock.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +15,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-PACKAGES = ("traust-contracts", "traust-ledger", "traust-engine")
+PACKAGES = ("traust-contracts", "traust-ledger", "traust-core", "traust-engine")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
@@ -21,24 +25,20 @@ def main() -> None:
     wheel_dir = parser.parse_args().wheel_dir
 
     project_root = Path(__file__).resolve().parents[1]
-    with (project_root / "pyproject.toml").open("rb") as stream:
-        pyproject = tomllib.load(stream)
-
-    sources = pyproject.get("tool", {}).get("uv", {}).get("sources", {})
-    if not isinstance(sources, dict):
-        raise SystemExit("pyproject.toml must define [tool.uv.sources]")
+    with (project_root / "uv.lock").open("rb") as stream:
+        locked = {p["name"]: p.get("source", {}) for p in tomllib.load(stream)["package"]}
 
     env = os.environ.copy()
     env["GIT_ALLOW_PROTOCOL"] = "https"
     for package in PACKAGES:
-        source = sources.get(package)
-        if not isinstance(source, dict):
-            raise SystemExit(f"pyproject.toml has no Git pin for {package}")
-        url = source.get("git")
-        revision = source.get("rev")
-        if not isinstance(url, str) or not url.startswith("https://"):
+        git = locked.get(package, {}).get("git")
+        if not isinstance(git, str):
+            raise SystemExit(f"uv.lock has no Git source for {package}")
+        url, _, revision = git.partition("#")
+        url = url.split("?", 1)[0]
+        if not url.startswith("https://"):
             raise SystemExit(f"{package} must use an HTTPS Git URL")
-        if not isinstance(revision, str) or not COMMIT_SHA.fullmatch(revision):
+        if not COMMIT_SHA.fullmatch(revision):
             raise SystemExit(f"{package} must be pinned to a full commit SHA")
 
         requirement = f"{package} @ git+{url}@{revision}"

@@ -55,11 +55,6 @@ _ENTRIES: tuple[tuple[str, str, str], ...] = (
         "check_skill_security",
         "Skill security-posture guard — catch a new or edited skill dropping controls.",
     ),
-    (
-        "report-digests",
-        "verify_report_digests",
-        "Verify every report against the digest its layer signed.",
-    ),
 )
 
 CHECK: dict[str, object] = {name: passthrough_op(module, help) for name, module, help in _ENTRIES}

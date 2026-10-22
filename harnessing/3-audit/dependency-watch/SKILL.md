@@ -54,8 +54,9 @@ executive summaries, SCI) already read.
    only. Otherwise: advisories newly published/modified since the last
    run (`--since <date>`, default = the previous run's stamp from the
    worklist/ledger context). Skip advisories already fully routed
-   (their artifact exists AND `route_impact_findings.py` reports
-   0 targets outstanding — re-runs are idempotent regardless).
+   (their impact artifact exists — re-runs are idempotent
+   regardless). Filing affected findings waits on the impact-analysis
+   skill port (traust-core finding intake).
 
    **Bootstrap / full-baseline mode (`bootstrap` argument, first run,
    quarterly re-baseline, or after portfolio-graph rebuilds):** run
@@ -78,7 +79,7 @@ executive summaries, SCI) already read.
    artifacts (exposure dashboard-visible immediately) with deep scans
    left to explicit operator staging; bounded CVEs get deep-scan +
    filing commands. Worklist rows carry **argv arrays**
-   (`impact_argv`/`route_argv`) — module names originate in target
+   (`impact_argv`) — module names originate in target
    repos' go.mod and versions in OSV, both attacker-influenceable, so
    rows are executed as argument vectors exactly as given (one Bash
    call per array, no shell string joining, no edits) in order

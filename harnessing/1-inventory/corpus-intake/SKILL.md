@@ -6,7 +6,6 @@ metadata:
   harness.tier: "secondary"
 allowed-tools:
   - Bash(python3 *traust/harnessing/1-inventory/corpus-intake/scripts/corpus_intake.py:*)
-  - Bash(python3 *traust/harnessing/census/scripts/build_census.py:*)
   - Bash(ls:*)
   - Read
   # scoped 2026-07-31 (P1-W4): A11 grandfather retired —
@@ -108,7 +107,7 @@ error: relay the message, fix the field, retry.
 ### Step 4 — Refresh the census
 
 ```bash
-python3 harnessing/census/scripts/build_census.py
+python3 RETIRED:build_census.py
 ```
 
 Confirm the new entry appears (engagements show "registered, no output"

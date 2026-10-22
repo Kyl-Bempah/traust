@@ -5,7 +5,6 @@ argument-hint: "[summary] [open] [<results-root-path>]"
 metadata:
   harness.tier: "secondary"
 allowed-tools:
-  - Bash(python3 *traust/harnessing/insecure-patterns/scripts/build_insecure_patterns.py:*)
   - Bash(ls:*)
   - Bash(open *.html:*)
   - Read
@@ -14,6 +13,8 @@ allowed-tools:
 ---
 
 # Insecure Coding Patterns — ASVS 5.0 roll-up
+
+> **Being ported to traust-core** (progress-tracker skill port 40, insecure-patterns): build_insecure_patterns.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
@@ -54,7 +55,7 @@ If none resolve, ask the user for the path.
 ### Step 2 — Run the harness script
 
 ```bash
-python3 harnessing/insecure-patterns/scripts/build_insecure_patterns.py \
+python3 RETIRED:build_insecure_patterns.py \
     --results-root <resolved-root> \
     [--summary]
 ```

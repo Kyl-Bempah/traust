@@ -7,6 +7,8 @@ metadata:
 
 # RBAC & Multi-Tenancy Rollup
 
+> **Being ported to traust-core** (progress-tracker skill port 41, rbac-tenancy-rollup): build_rbac_tenancy_rollup.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
+
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
 > `$TRAUST_CONFIG_HOME` (`docs/setup.md`, Storage locations); substitute your
@@ -29,7 +31,7 @@ analysis-results path, or an alternate output directory.
 ### Step 1 — run the deterministic builder
 
 ```bash
-python harnessing/rbac-tenancy-rollup/scripts/build_rbac_tenancy_rollup.py \
+python RETIRED:build_rbac_tenancy_rollup.py \
     [--trees findings ...] [--analysis-results <path>] [--out <dir>]
 ```
 

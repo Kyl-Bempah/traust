@@ -28,7 +28,7 @@ as a single command.
 Ordering is the whole point:
 
 1. **Projections** — python3 -m traust.cli corpus findings-db, then
-   `harnessing/census/scripts/build_census.py`. Everything downstream reads
+   `RETIRED:build_census.py`. Everything downstream reads
    these; a failure here **aborts the run** (consumers would silently
    read stale data).
 2. **Consumers** — executive summary, findings-trends,
@@ -97,12 +97,12 @@ Ordering is the whole point:
 | Stage | Tier | Builder |
 |---|---|---|
 | `findings-db` | projection | python3 -m traust.cli corpus findings-db |
-| `census` | projection | `harnessing/census/scripts/build_census.py` |
-| `exec-summary` | consumer | `harnessing/executive-summary-findings/scripts/build_executive_summary.py` |
-| `trends` | consumer | `harnessing/findings-trends/scripts/build_trends.py` |
-| `insecure-patterns` | consumer | `harnessing/insecure-patterns/scripts/build_insecure_patterns.py` |
+| `census` | projection | `RETIRED:build_census.py` |
+| `exec-summary` | consumer | `RETIRED:build_executive_summary.py` |
+| `trends` | consumer | `RETIRED:build_trends.py` |
+| `insecure-patterns` | consumer | `RETIRED:build_insecure_patterns.py` |
 | `validation-fuzz` | consumer | `harnessing/validation-fuzz-dashboard/scripts/build_validation_fuzz_dashboard.py` |
-| `rbac-tenancy` | consumer | `harnessing/rbac-tenancy-rollup/scripts/build_rbac_tenancy_rollup.py` |
+| `rbac-tenancy` | consumer | `RETIRED:build_rbac_tenancy_rollup.py` |
 | `sla` | consumer | python3 -m traust.cli metrics sla |
 | `compliance` | consumer | python3 -m traust.cli compliance dashboard |
 | `attack-coverage` | consumer | `harnessing/attack-coverage/scripts/build_attack_coverage.py` |

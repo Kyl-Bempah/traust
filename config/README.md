@@ -45,7 +45,7 @@ ships a template for each such file:
 | `rpm-distgit-watch.example.yaml` | `rpm-distgit-watch.yaml` | `build_release_events.py` (threat-model event feeder) |
 | `rule-pack-allowlist.example.yaml` | `rule-pack-allowlist.yaml` | `traust_engine.adapters.opengrep`, `/mine-ledger` |
 | `safe-exec-profiles.example.yaml` | `safe-exec-profiles.yaml` | `traust_engine._util.safe_exec` |
-| `hardening-risk-weights.example.json` | `hardening-risk-weights.json` | `emit_triage_ledger_events` |
+| `hardening-risk-weights.example.json` | `hardening-risk-weights.json` | none (its consumer retired with the traust-core hub; the triage skill port decides) |
 | `export.example.yaml` | `export.yaml` | the one-shot public export (public forge URL, private URLs to rewrite, build plumbing to strip, CHANGELOG cut) |
 | `internal-vocabulary.example.yaml` | `internal-vocabulary.yaml` | `scan_internal_refs` |
 | `ledger-signing-key.example.pub` | `ledger-signing-key.pub` | `traust_engine.reporting.validate`, `/drift-watch` signature check |

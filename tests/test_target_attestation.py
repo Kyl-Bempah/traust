@@ -1,16 +1,10 @@
 """P2 target attestation: script logic + emitter fail-closed gate."""
 
-import json
 import unittest
-from pathlib import Path
 
 from soundness import controls_flag, flag_validated_finding
 
 from traust.cli.attest_target import parse_semverish, version_in_range
-from traust.cli.emit_validation_ledger_events import (
-    _attestation_required,
-    load_attestation,
-)
 from traust.paths import skill_dir
 
 
@@ -27,98 +21,6 @@ class TestVersionRange(unittest.TestCase):
     def test_unparseable_is_none(self):
         self.assertIsNone(version_in_range("main", "<v2", None))
         self.assertIsNone(parse_semverish("not-a-version"))
-
-
-class TestAttestationGate(unittest.TestCase):
-    def test_required_at_threshold(self):
-        self.assertTrue(_attestation_required({"metadata": {"harness_version": "0.176.0-abc1234"}}))
-        self.assertTrue(_attestation_required({"metadata": {"harness_version": "1.0.0"}}))
-
-    def test_grandfathered_below_threshold(self):
-        self.assertFalse(
-            _attestation_required({"metadata": {"harness_version": "0.175.2-abc1234"}})
-        )
-        self.assertFalse(_attestation_required({"metadata": {}}))
-
-    def test_load_attestation_missing(self):
-        import tempfile
-
-        d = Path(tempfile.mkdtemp())
-        self.assertIsNone(load_attestation(d))
-
-    def test_load_attestation_unparseable_fails_closed(self):
-        import tempfile
-
-        d = Path(tempfile.mkdtemp())
-        (d / "target-attestation.json").write_text("{broken")
-        doc = load_attestation(d)
-        self.assertFalse(doc["attested"])
-
-    def test_load_attestation_roundtrip(self):
-        import tempfile
-
-        d = Path(tempfile.mkdtemp())
-        (d / "target-attestation.json").write_text(
-            json.dumps(
-                {
-                    "attested": True,
-                    "checks": [{"name": "x", "ok": True, "required": True, "detail": ""}],
-                }
-            )
-        )
-        self.assertTrue(load_attestation(d)["attested"])
-
-
-class TestBuildEventsGate(unittest.TestCase):
-    """The gate voids verdicts structurally — confirmed AND refuted."""
-
-    def _finding(self, verdict):
-        return {
-            "verdict": verdict,
-            "source_id": "r/F-1",
-            "source_report": "findings/p/r/r-security-audit.json",
-        }
-
-    def _run(self, attestation, required, verdict="confirmed"):
-        from traust.cli.emit_validation_ledger_events import build_events
-
-        class _Resolver:
-            results_root = Path("/tmp")
-
-            def resolve(self, src, fid):
-                return [], "no baseline (test)"
-
-            def _finding(self, t, fid):
-                return None
-
-        report = {
-            "metadata": {"harness_version": "0.176.0-x", "date": "2026-07-25"},
-            "validated_findings": [self._finding(verdict)],
-        }
-        return build_events(
-            report,
-            "validations/x/report.json",
-            _Resolver(),
-            "2026-07-25T00:00:00+00:00",
-            attestation=attestation,
-            attestation_required=required,
-        )
-
-    def test_unattested_voids_confirmed(self):
-        out = self._run({"attested": False, "checks": []}, True, "confirmed")
-        # flagged findings skip the event path; they fail baseline
-        # resolution here, but must be counted unsound, never confirmed
-        self.assertEqual(out["counts"]["confirmed"], 0)
-
-    def test_missing_attestation_voids_when_required(self):
-        out = self._run(None, True, "refuted")
-        self.assertEqual(out["counts"]["refuted"], 0)
-
-    def test_legacy_report_passes_without_attestation(self):
-        out = self._run(None, False, "refuted")
-        # not flagged by the attestation gate: proceeds to normal
-        # handling (and is then skipped only for baseline resolution)
-        self.assertEqual(out["counts"]["unsound"], 0)
 
 
 if __name__ == "__main__":
@@ -200,129 +102,6 @@ class TestDifferentialProbes(unittest.TestCase):
 
         vf = self._vf(None, verb="auth can-i --list", observed="no resources found")
         self.assertIsNone(differential_flag(vf))
-
-
-class TestEvidenceGrades(unittest.TestCase):
-    """P4: only E0/E1 keep class-1 override power (decision 2026-07-25)."""
-
-    def test_e2_demotes_to_machine_static(self):
-        from traust.cli.build_cumulative import event_class
-
-        ev = {
-            "source": {"type": "validation_report", "actor": {"kind": "machine"}},
-            "evidence_grade": "E2",
-        }
-        self.assertEqual(event_class(ev), 3)
-
-    def test_e0_keeps_class1(self):
-        from traust.cli.build_cumulative import event_class
-
-        ev = {
-            "source": {"type": "validation_report", "actor": {"kind": "machine"}},
-            "evidence_grade": "E0",
-        }
-        self.assertEqual(event_class(ev), 1)
-
-    def test_ungraded_exec_source_grandfathered_class1(self):
-        from traust.cli.build_cumulative import event_class
-
-        ev = {"source": {"type": "validation_report", "actor": {"kind": "machine"}}}
-        self.assertEqual(event_class(ev), 1)
-
-
-class TestConflictRouting(unittest.TestCase):
-    """P6: disagreement adjudicates as conflict, never unopposed FP."""
-
-    def _ev(self, validity, kind="machine", stype="triage_report", i=0):
-        return {
-            "event_id": f"e{i}",
-            "finding_ref": "F-1",
-            "recorded_at": f"2026-07-2{i}T00:00:00+00:00",
-            "source": {"type": stype, "ref": "x", "actor": {"kind": kind, "identity": "m"}},
-            "disposition": {"validity": validity},
-        }
-
-    def test_conflict_suppresses_awaiting_signoff(self):
-        from traust.cli.build_cumulative import derive_disposition
-
-        events = [
-            self._ev("confirmed", stype="validation_report", i=0),
-            self._ev("false_positive", i=1),
-        ]
-        disp = derive_disposition({"id": "F-1"}, events, "2026-07-25T00:00:00+00:00")
-        self.assertTrue(disp.get("conflict"))
-        self.assertFalse(disp.get("refuted_awaiting_signoff"))
-
-    def test_unopposed_fp_still_queues(self):
-        from traust.cli.build_cumulative import derive_disposition
-
-        events = [self._ev("false_positive", i=1)]
-        disp = derive_disposition({"id": "F-1"}, events, "2026-07-25T00:00:00+00:00")
-        self.assertTrue(disp.get("refuted_awaiting_signoff"))
-        self.assertFalse(disp.get("conflict"))
-
-
-class TestSeverityProposals(unittest.TestCase):
-    """P9: proposals queue for countersign; E3 never proposes."""
-
-    def _run(self, grade, proposal=True):
-        from traust.cli.emit_validation_ledger_events import build_events
-
-        class _Resolver:
-            results_root = Path("/tmp")
-
-            def resolve(self, src, fid):
-                return [Path("/tmp/a.json")], "direct"
-
-            def _finding(self, t, fid):
-                return {"id": fid}
-
-        f = {
-            "verdict": "confirmed",
-            "source_id": "r/F-1",
-            "source_report": "findings/p/r/r-security-audit.json",
-            "evidence_grade": grade,
-            "claimed_severity": "critical",
-        }
-        if proposal:
-            f["severity_validation"] = {
-                "demonstrated": {"privileges_required": "high"},
-                "delta": -2.1,
-                "proposal": {
-                    "severity": "medium",
-                    "rationale": "exploitation demonstrably requires cluster-admin credentials",
-                },
-            }
-        report = {
-            "metadata": {"harness_version": "0.180.0-x", "date": "2026-07-25"},
-            "validated_findings": [f],
-        }
-        return build_events(
-            report,
-            "validations/x/report.json",
-            _Resolver(),
-            "2026-07-25T00:00:00+00:00",
-            attestation={"attested": True, "checks": []},
-            attestation_required=True,
-            grades_required=True,
-        )
-
-    def test_e0_proposal_queues(self):
-        out = self._run("E0")
-        nr = next(iter(out["per_audit"].values()))["needs_review"]
-        self.assertTrue(any(i["queue_reason"] == "severity_proposal" for i in nr))
-
-    def test_e3_never_proposes(self):
-        out = self._run("E3")
-        buckets = list(out["per_audit"].values())
-        reasons = [i["queue_reason"] for b in buckets for i in b["needs_review"]]
-        self.assertNotIn("severity_proposal", reasons)
-        self.assertIn("weak_confirmation", reasons)
-
-    def test_no_proposal_no_queue(self):
-        out = self._run("E0", proposal=False)
-        nr = next(iter(out["per_audit"].values()))["needs_review"]
-        self.assertFalse(any(i["queue_reason"] == "severity_proposal" for i in nr))
 
 
 class TestValidationBenchmark(unittest.TestCase):

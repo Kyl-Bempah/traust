@@ -5,7 +5,6 @@ argument-hint: "[--inputs DIR] [--findings DIR] [--out DIR] [--exclude SEGMENT].
 metadata:
   harness.tier: "secondary"
 allowed-tools:
-  - Bash(python3 *traust/harnessing/repo-graph/scripts/build_repo_graph.py:*)
   - Bash(ls:*)
   - Bash(jq:*)
   - Bash(open *.html:*)
@@ -16,6 +15,8 @@ allowed-tools:
 ---
 
 # repo-graph
+
+> **Being ported to traust-core** (progress-tracker skill port 10, repo-graph): build_repo_graph.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
@@ -106,7 +107,7 @@ Per-ref enrichment (dependencies, PQC posture at the ref) is Phase 3 —
 
 2. Run the builder:
 
-       python3 harnessing/repo-graph/scripts/build_repo_graph.py $ARGUMENTS
+       python3 RETIRED:build_repo_graph.py $ARGUMENTS
 
    The script discovers audit reports through the corpus resolver
    (python3 -m traust.cli corpus, the single definition of report discovery):

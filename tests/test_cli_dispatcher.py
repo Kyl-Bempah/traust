@@ -26,7 +26,6 @@ def test_all_planned_groups_registered():
         "build",
         "check",
         "compliance",
-        "corpus",
         "dashboard",
         "feeds",
         "impact",
@@ -35,7 +34,6 @@ def test_all_planned_groups_registered():
         "portfolio",
         "registry",
         "reporting",
-        "route",
         "sweep",
         "tools",
         "util",
@@ -55,10 +53,9 @@ def test_traust_impact_analyze_help():
     assert "--config-home" in proc.stdout
 
 
-def test_traust_portfolio_and_corpus_help():
+def test_traust_portfolio_and_sweep_help():
     for group, op, flag in (
         ("portfolio", "build", "--spine"),
-        ("corpus", "findings-db", "--results-root"),
         ("sweep", "collect", "--force"),
     ):
         proc = subprocess.run(

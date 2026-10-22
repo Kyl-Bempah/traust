@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from traust.context import load_engine
 from traust.paths import skill_dir
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -189,28 +188,3 @@ def test_dry_run_writes_nothing(cfg_path, capsys):
     )
     assert cfg_path.read_text() == before
     assert "t2:" in capsys.readouterr().out
-
-
-def test_render_roundtrips_shipped_config():
-    cfg = load_engine().corpus.config().model_dump(exclude_none=True)
-    reparsed = yaml.safe_load(ci.render_config(cfg))
-    for section in ("trees", "engagements", "overrides"):
-        assert (reparsed.get(section) or {}) == (cfg.get(section) or {})
-
-
-def test_resolver_accepts_written_file(cfg_path):
-    _run(
-        cfg_path,
-        "add-engagement",
-        "e2",
-        "--label",
-        "l-e2",
-        "--ownership",
-        "external-bu",
-        "--business-unit",
-        "E2",
-        "--tree",
-        "e2-findings",
-    )
-    cfg = ci.corpus.load_config(cfg_path)  # raises if invalid
-    assert cfg.engagements["e2"].tree == "e2-findings"

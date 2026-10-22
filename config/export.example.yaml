@@ -21,6 +21,7 @@ private_base_urls:
 repos:
   - traust-contracts
   - traust-ledger
+  - traust-core
   - traust-engine
   - traust
   - traust-sdk

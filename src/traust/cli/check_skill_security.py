@@ -134,11 +134,6 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
         "harnessing/3-audit/pqc-readiness/scripts/bulk_prescan.py",
     ): "reviewed — https-scheme gate at call site (startswith check) prevents non-https;"
     " url originates from the harness corpus registry",
-    # --- S4: guidance strings, not execution ---
-    (
-        "S4",
-        "harnessing/insecure-patterns/scripts/build_insecure_patterns.py",
-    ): "reviewed — remediation-advice string constants mention shell=True/sh -c; no execution",
     # --- S4: pod-side shells — the sh -c runs INSIDE the scoped target
     # pod/container via runtime exec, never on the harness host; the
     # outer argv is kubeargv-classified and scope-checked (P0-2) ---
@@ -155,12 +150,6 @@ EXEMPTIONS: dict[tuple[str, str], str] = {
     # --- S4 shell-exec ---
     # (base.py entry REMOVED 2026-07-31: P2.13 closed — PoC-string steps
     #  now validate and execute via traust_engine._util.safe_exec, no shell.)
-    (
-        "S4",
-        "harnessing/track-findings/scripts/baseline_claims.py",
-    ): "reviewed — AST false positive: shell= is a dict kwarg to "
-    "LedgerService.ensure_layer_file(), not subprocess (assessment "
-    "2026-07-31 rollup-F3)",
     # --- S5 token-argv ---
     (
         "S5",

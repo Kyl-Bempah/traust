@@ -8,6 +8,8 @@ metadata:
 
 # Compliance Check — Evidence-Gated Control Assessment
 
+> **Being ported to traust-core** (progress-tracker skill port 32, compliance-check): compliance_scope_intake.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
+
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
 > `$TRAUST_CONFIG_HOME` (`docs/setup.md`, Storage locations); substitute your
@@ -208,7 +210,7 @@ edges, data flows, environments, compensating controls) into two
 validated artifacts, and NOTHING else:
 
 1. a scope-registry entry, written ONLY via
-   `harnessing/3-audit/compliance-check/scripts/compliance_scope_intake.py` (schema-validated,
+   `RETIRED:compliance_scope_intake.py` (schema-validated,
    dry-run-resolved, overwrite-refused — never hand-edit the YAML from
    this mode), and
 2. an attestation bundle rendered into the assessment's

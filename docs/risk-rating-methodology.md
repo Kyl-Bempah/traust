@@ -1,7 +1,7 @@
 # Risk-rating methodology
 
 How the harness turns per-finding scores into portfolio risk metrics, and
-why. Implemented in `harnessing/findings-trends/scripts/build_trends.py`
+why. Implemented in build_trends.py (retired with the traust-core hub)
 (`owasp_rating()`); surfaced by `/findings-trends`,
 `/traust-metrics`, and the executive-trends dashboard
 (python3 -m traust.cli metrics history).
