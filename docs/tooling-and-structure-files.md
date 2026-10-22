@@ -49,7 +49,6 @@ The schemas below (from the installed `traust-contracts` package) are the comple
 | python3 -m traust.cli reporting sarif | Exports any report (incl. disposition-aware findings-current and cloud-config audits) to SARIF 2.1.0 for any SARIF consumer — a derived projection, dispositions become suppressions; `--results-root` batch sweep |
 | harnessing/4-triage/triage/scripts/render_triage.py | Renders triage reports |
 | python3 -m traust.cli check citations | Citation verification gate for findings |
-| harnessing/4-triage/triage/scripts/lint_verdict_citations.py | Verdict citation linter |
 | python3 -m traust.cli build symbol-index | Builds symbol index for triage acceleration |
 | python3 -m traust.cli admin query-index | Queries the symbol index |
 | harnessing/4-triage/track-findings/scripts/baseline_claims.py | Baseline claim extraction |
