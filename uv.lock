@@ -1,10 +1,13 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.12'",
     "python_full_version < '3.12'",
 ]
+
+[manifest]
+overrides = [{ name = "traust-contracts", git = "https://github.com/traust-security/traust-contracts.git?rev=72e641c992cc08ef5381e436d48ce457887ede32" }]
 
 [[package]]
 name = "annotated-types"
@@ -913,7 +916,7 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8b/04/e7c1fe4dc78a6fdbfd6c337b1c3732ff543b8a397683ab38378447baa331/pyee-13.0.1.tar.gz", hash = "sha256:0b931f7c14535667ed4c7e0d531716368715e860b988770fc7eb8578d1f67fc8", size = 31655, upload-time = "2026-02-14T21:12:28.044Z" }
 wheels = [
@@ -928,7 +931,7 @@ resolution-markers = [
     "python_full_version >= '3.12'",
 ]
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1d/f1/fdedc2c75c3e31a330659c85e5793bb18b3397981fbf0844c6dee5b18926/pyee-14.0.0.tar.gz", hash = "sha256:76dd0f4314ecd27f02dc73589dea7fd3853f9b6176d8ef9b122860657e3602de", size = 98760, upload-time = "2026-08-13T04:26:11.021Z" }
 wheels = [
@@ -1495,6 +1498,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "referencing" },
     { name = "traust-contracts" },
+    { name = "traust-core" },
     { name = "traust-engine" },
     { name = "traust-ledger" },
 ]
@@ -1529,7 +1533,8 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "referencing" },
     { name = "sigstore", marker = "extra == 'signing'", specifier = ">=4.0,<5.0" },
-    { name = "traust-contracts", git = "https://github.com/traust-security/traust-contracts.git?rev=84bd8e4f6cda7431fb4a1321b1d10715f2220860" },
+    { name = "traust-contracts", git = "https://github.com/traust-security/traust-contracts.git?rev=72e641c992cc08ef5381e436d48ce457887ede32" },
+    { name = "traust-core", git = "https://github.com/traust-security/traust-core.git?rev=fc6ae2433cc81444be62345ed863e957fc6638c8" },
     { name = "traust-engine", git = "https://github.com/traust-security/traust-engine.git?rev=88c8065f4509cc3d3b228cce3413584425b44413" },
     { name = "traust-ledger", git = "https://github.com/traust-security/traust-ledger.git?rev=c3e6d2ebb1c3105e3ddf9c262198a9514d94291e" },
     { name = "traust-ledger", extras = ["db"], marker = "extra == 'ledger-db'", git = "https://github.com/traust-security/traust-ledger.git?rev=c3e6d2ebb1c3105e3ddf9c262198a9514d94291e" },
@@ -1550,12 +1555,25 @@ dev = [
 
 [[package]]
 name = "traust-contracts"
-version = "0.60.0"
-source = { git = "https://github.com/traust-security/traust-contracts.git?rev=84bd8e4f6cda7431fb4a1321b1d10715f2220860#84bd8e4f6cda7431fb4a1321b1d10715f2220860" }
+version = "0.0.0"
+source = { git = "https://github.com/traust-security/traust-contracts.git?rev=72e641c992cc08ef5381e436d48ce457887ede32#72e641c992cc08ef5381e436d48ce457887ede32" }
 dependencies = [
     { name = "jsonschema", extra = ["format-nongpl"] },
     { name = "pydantic" },
     { name = "pyyaml" },
+]
+
+[[package]]
+name = "traust-core"
+version = "0.1.0"
+source = { git = "https://github.com/traust-security/traust-core.git?rev=fc6ae2433cc81444be62345ed863e957fc6638c8#fc6ae2433cc81444be62345ed863e957fc6638c8" }
+dependencies = [
+    { name = "jsonschema", extra = ["format-nongpl"] },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "referencing" },
+    { name = "sqlalchemy" },
+    { name = "traust-contracts" },
 ]
 
 [[package]]

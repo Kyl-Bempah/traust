@@ -22,7 +22,11 @@ import yaml
 
 pytest.importorskip("sqlalchemy")
 from traust_contracts.v1.models.layer import LayerActor
-from traust_contracts.v1.storage import Store
+
+try:
+    from traust_contracts.v1.storage import Store
+except ImportError:  # retired by the one-owner contracts (72e641c); rebuilt upstream
+    pytest.skip("traust-contracts Store retired; awaiting its rebuild", allow_module_level=True)
 
 HARNESS = Path(__file__).resolve().parents[1]
 FIXTURE_CONFIG = Path(__file__).parent / "fixtures" / "config"

@@ -54,8 +54,15 @@ traust = "traust.cli.__main__:main"
 [dependency-groups]
 dev = ["ruff>=0.6", "pytest-xdist>=3", "traust-ledger[db]"]
 
+[tool.uv]
+# traust-core (development) is built on the one-owner contracts (72e641c); engine
+# and ledger development still pin 84bd8e4. Unify on 72e641c until they bump.
+override-dependencies = [
+    "traust-contracts @ git+https://github.com/traust-security/traust-contracts.git@72e641c992cc08ef5381e436d48ce457887ede32",
+]
+
 [tool.uv.sources]
-traust-contracts = { git = "https://github.com/traust-security/traust-contracts.git", rev = "84bd8e4f6cda7431fb4a1321b1d10715f2220860" }
+traust-contracts = { git = "https://github.com/traust-security/traust-contracts.git", rev = "72e641c992cc08ef5381e436d48ce457887ede32" }
 traust-engine = { git = "https://github.com/traust-security/traust-engine.git", rev = "88c8065f4509cc3d3b228cce3413584425b44413" }
 traust-ledger = { git = "https://github.com/traust-security/traust-ledger.git", rev = "c3e6d2ebb1c3105e3ddf9c262198a9514d94291e" }
 traust-core = { git = "https://github.com/traust-security/traust-core.git", rev = "fc6ae2433cc81444be62345ed863e957fc6638c8" }
