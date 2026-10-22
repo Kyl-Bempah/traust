@@ -4,10 +4,28 @@ All notable changes to Traust are documented here.
 
 ## [Unreleased]
 
-- Toolchain images build Python dependency wheels from the commit SHAs in
-  `pyproject.toml`, without sibling checkouts. The image includes the required
-  contracts/ledger runtime dependencies and checks package consistency plus a
-  ledger auth import during the build.
+- **Breaking: traust-core is the hub.** traust depends on traust-core and
+  traust-engine only; traust-contracts and traust-ledger come through core's
+  pins. Domain state goes through core's services:
+  `traust.context.load_services()` (SQLite under `~/.traust` with no
+  `core.yaml` in the config home).
+- **Retired, to be rebuilt per skill on core's services** (progress-tracker
+  skill ports): the code that ran on the old ledger and corpus.
+  - Commands: `traust corpus …`, `traust route …`, `traust ledger emit-*` /
+    `pull`, `admin countersign`, `build cumulative`, `check report-digests`,
+    `feeds reconcile-cve-provenance`; `check drift` loses its findings.db,
+    ledger, signature, identity and corpus-registration checks.
+  - Skill scripts: census, compliance-check scope intake, secure-code-audit
+    coverage-gap rollup, track-findings baseline claims, create-fuzzing
+    events, executive summary, findings trends, insecure patterns, mine-ledger
+    rule drafts, rbac-tenancy rollup, recall-benchmark, repo-graph, threat
+    register; their SKILL.md files say so. `refresh-dashboards` drops their
+    stages.
+- Toolchain images build Python dependency wheels at the commits `uv.lock`
+  resolved (traust-core, traust-engine, and the contracts/ledger pins that come
+  through core), without sibling checkouts, and check package consistency plus
+  a traust-core import during the build. `requirements.txt` drops ldap3 and
+  PyJWT (the ledger's auth) and adds sqlalchemy (core).
 
 ## [0.34.2]
 

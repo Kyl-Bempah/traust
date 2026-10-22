@@ -22,7 +22,6 @@ allowed-tools:
   - Bash(grep:*)
   - Bash(head:*)
   - Bash(python3 -m traust.cli build cumulative:*)
-  - Bash(python3 *harnessing/4-triage/track-findings/scripts/baseline_claims.py:*)
   - Bash(python3 *-m traust.cli.countersign:*)
   - Bash(python3 *-m traust.cli corpus finding-identity:*)
   - Bash(python3 *-m traust.cli reporting validate:*)
@@ -33,6 +32,8 @@ allowed-tools:
 ---
 
 # Track Findings
+
+> **Being ported to traust-core** (progress-tracker skill port 02, track-findings): baseline_claims.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
@@ -54,7 +55,7 @@ Two artifacts, per audited repo, living next to the original audit report
 | `<repo>-findings-current.{json,md}` | `contracts/schemas/report.schema.json` (with `disposition` blocks) | Derived. Regenerated from scratch every run by `build_cumulative.py`. |
 
 The original `*-security-audit.json` is **never modified** — and since
-harness 0.39.0 that is machine-enforced: `harnessing/4-triage/track-findings/scripts/baseline_claims.py`
+harness 0.39.0 that is machine-enforced: `RETIRED:baseline_claims.py`
 records a sha256 of every finding's claim fields into
 `metadata.claim_hashes`, `validate_report.py` verifies them on every layer
 validation, and `build_cumulative.py` refuses to rebuild from a baseline
@@ -284,7 +285,7 @@ events, which need none.
 3. Build the set of valid finding IDs. Every event must reference one.
 4. **Baseline the claims** (tamper-evidence for the audit report):
    ```
-   python3 <harness>/harnessing/4-triage/track-findings/scripts/baseline_claims.py record <audit.json> <layer.json>
+   python3 <harness>RETIRED:baseline_claims.py record <audit.json> <layer.json>
    ```
    This pins each finding's canonical claim fields into
    `metadata.claim_hashes` — new findings (sanctioned appends from

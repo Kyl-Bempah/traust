@@ -16,13 +16,14 @@ metadata:
 allowed-tools:
   - Read
   - Glob
-  - Bash(python3 *harnessing/threat-register/scripts/build_threat_register.py:*)
   - Bash(python3 *-m traust_engine.reporting.lint:*)
   - Bash(ls:*)
   - Bash(wc:*)
 ---
 
 # threat-register
+
+> **Being ported to traust-core** (progress-tracker skill port 13, threat-register): build_threat_register.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in

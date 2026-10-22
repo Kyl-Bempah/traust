@@ -87,7 +87,7 @@ def test_symbol_index_skips_file_symlinks(tmp_path):
 
 def test_symbol_index_cache_is_per_user(tmp_path, monkeypatch):
     """B4: no shared predictable /tmp cache."""
-    bsi = sys.modules["build_symbol_index_p1"]
+    bsi = _load("build_symbol_index_p1", "src/traust/cli/build_symbol_index.py")
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
     out = bsi.default_index_path(tmp_path, "abc1234")
     assert str(out).startswith(str(tmp_path / "xdg"))

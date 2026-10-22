@@ -1,7 +1,7 @@
 # Containerfile.toolchain — complete runtime image for Traust.
 #
 # Everything a consumer needs in one image: pinned scanner binaries, Python
-# stack (traust-engine + contracts + traust-ledger + traust), and
+# stack (traust-core + contracts + traust-ledger + traust-engine + traust), and
 # harness skill data. SCI k8s jobs and CI runners pull this and go.
 #
 # Build (always use the wrapper — it reads scanner pins from external-tools.yaml
@@ -37,7 +37,7 @@ LABEL name="harness-toolchain" \
       summary="Traust — complete runtime image" \
       description="All-in-one image: pinned scanner binaries (grype, \
 govulncheck, opengrep, gitleaks, syft, cosign, skopeo, yara, pip-audit), the full \
-Python stack (traust-engine, contracts, traust-ledger, traust), and \
+Python stack (traust-core, contracts, traust-ledger, traust-engine, traust), and \
 skill data. Pull, mount a target, run a profile." \
       vendor="Red Hat, Inc."
 
@@ -101,7 +101,7 @@ RUN python3.11 -m pip install --no-cache-dir "pip-audit==${PIP_AUDIT_VERSION}"
 # joern is too large for the base image (JVM + ~800MB). Skills that need it
 # should extend this image or use the impact profile separately.
 
-# --- Python stack: harness engine + contracts + traust-ledger + harness CLI ---
+# --- Python stack: traust-core (+ contracts, ledger) + engine + harness CLI ---
 # The build script builds pinned dependency wheels from pyproject.toml.
 # Native deps (from requirements.txt) are installed from PyPI inside the container.
 COPY requirements.txt /tmp/requirements.txt
@@ -127,9 +127,9 @@ RUN if [ "$SKIP_DB" = "0" ]; then \
       grype db update || true; \
     fi
 
-# --- Smoke test: check Python dependencies, ledger auth, and tool versions ---
+# --- Smoke test: check Python dependencies, traust-core, and tool versions ---
 RUN python3.11 -m pip check && \
-    python3.11 -c "import traust_ledger.auth.directory" && \
+    python3.11 -c "import traust_core.v1.context" && \
     opengrep --version && \
     gitleaks version && \
     syft --version && \

@@ -7,6 +7,8 @@ metadata:
 
 # Executive Summary — Findings
 
+> **Being ported to traust-core** (progress-tracker skill port 43, executive-summary-findings): build_executive_summary.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
+
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
 > `$TRAUST_CONFIG_HOME` (`docs/setup.md`, Storage locations); substitute your
@@ -51,7 +53,7 @@ If none resolve, ask the user for the path.
 The skill ships `build_executive_summary.py` alongside this file. Invoke it with Bash:
 
 ```bash
-python3 "$SKILL_DIR/scripts/build_executive_summary.py" \
+python3 RETIRED:build_executive_summary.py \
     --results-root <resolved-root> \
     [--open] [--include-triage] [--exclude-branch-variants] \
     [--by-segment [--inputs-root <inputs-inventory>] \

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from traust.context import load_engine
 from traust.paths import skill_dir
 
 yaml = pytest.importorskip("yaml")
@@ -205,11 +204,6 @@ def test_precision_empty_tree_is_honest(tmp_path):
 dash = _load("build_compliance_dashboard")
 
 
-@pytest.fixture(scope="module")
-def corpus_cfg():
-    return load_engine().corpus.config()
-
-
 def _mk_assessment_dir(tmp_path, target, generated_at, ns_count=1):
     d = tmp_path / "assessments" / target
     d.mkdir(parents=True)
@@ -255,102 +249,6 @@ def _mk_assessment_dir(tmp_path, target, generated_at, ns_count=1):
         )
     )
     return d
-
-
-def test_dashboard_latest_per_target_and_transparency(tmp_path, corpus_cfg):
-    _mk_assessment_dir(tmp_path, "env-a", "2026-07-18T00:00:00Z", ns_count=3)
-    _mk_assessment_dir(tmp_path, "env-a-old", "2026-07-01T00:00:00Z")
-    # newer artifact for env-a in a sibling dir
-    d = tmp_path / "assessments" / "env-a-new"
-    d.mkdir()
-    newer = json.loads((tmp_path / "assessments/env-a/compliance-assessment.json").read_text())
-    newer["metadata"]["generated_at"] = "2026-07-19T00:00:00Z"
-    newer["metadata"]["target"]["environment"] = "env-a"
-    (d / "compliance-assessment.json").write_text(json.dumps(newer))
-
-    doc = dash.build(
-        tmp_path / "assessments", tmp_path / "absent.db", tmp_path / "absent", corpus_cfg
-    )
-    by_target = {t["target"]: t for t in doc["targets"]}
-    assert by_target["env-a"]["generated_at"] == "2026-07-19T00:00:00Z"
-    assert "pci-dss-v4" in by_target["env-a"]["skipped_frameworks"]
-    md = dash.render_md(doc, [])
-    assert "no CDE" in md  # skip reasons rendered
-    assert "compliance percentage" not in md.lower().replace("no blended compliance percentage", "")
-    assert "Trend renders once" in md  # single point = no trend
-
-
-def test_dashboard_trend_needs_two_snapshots(tmp_path, corpus_cfg):
-    _mk_assessment_dir(tmp_path, "e", "2026-07-19T00:00:00Z")
-    doc = dash.build(
-        tmp_path / "assessments", tmp_path / "absent.db", tmp_path / "absent", corpus_cfg
-    )
-    h1 = [
-        {
-            "generated_at": "2026-07-18T00:00:00Z",
-            "targets": 1,
-            "not_satisfied_total": 5,
-            "not_assessed_total": 2,
-        }
-    ]
-    assert "Trend renders once" in dash.render_md(doc, h1)
-    h2 = [
-        *h1,
-        {
-            "generated_at": "2026-07-19T00:00:00Z",
-            "targets": 1,
-            "not_satisfied_total": 4,
-            "not_assessed_total": 2,
-        },
-    ]
-    md = dash.render_md(doc, h2)
-    assert "| 2026-07-18 | 1 | 5 | 2 |" in md
-
-
-def test_single_framework_run_never_hides_other_coverage(tmp_path, corpus_cfg):
-    """User requirement: per-framework runs must merge, not overwrite."""
-    _mk_assessment_dir(tmp_path, "env-m", "2026-07-18T00:00:00Z")
-    # newer SOC 2-only assessment of the SAME target
-    d = tmp_path / "assessments" / "env-m-soc2"
-    d.mkdir()
-    (d / "env-m-soc2-tsc-compliance-assessment.json").write_text(
-        json.dumps(
-            {
-                "metadata": {
-                    "artifact": "compliance-assessment",
-                    "harness_version": "t",
-                    "registry_hash": "b" * 64,
-                    "generated_at": "2026-07-19T12:00:00Z",
-                    "target": {"kind": "environment", "environment": "env-m"},
-                    "frameworks": [{"id": "soc2-tsc", "caveat": "point-in-time"}],
-                    "skipped_frameworks": {},
-                },
-                "coverage": {
-                    "soc2-tsc": {
-                        "total_in_scope": 2,
-                        "deterministic": 2,
-                        "evidence_review": 0,
-                        "organizational": 0,
-                        "satisfied": 2,
-                        "not_satisfied": 0,
-                        "not_applicable": 0,
-                        "not_assessed": 0,
-                    }
-                },
-                "results": [],
-            }
-        )
-    )
-    doc = dash.build(
-        tmp_path / "assessments", tmp_path / "absent.db", tmp_path / "absent", corpus_cfg
-    )
-    t = {x["target"]: x for x in doc["targets"]}["env-m"]
-    # BOTH frameworks present, each with its own assessment date
-    assert set(t["coverage"]) == {"nist-800-53-rev5", "soc2-tsc"}
-    assert t["assessed_at"]["soc2-tsc"].startswith("2026-07-19")
-    assert t["assessed_at"]["nist-800-53-rev5"].startswith("2026-07-18")
-    md = dash.render_md(doc, [])
-    assert "2026-07-18" in md and "2026-07-19" in md
 
 
 def test_artifact_base_naming():

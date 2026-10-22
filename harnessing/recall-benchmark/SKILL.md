@@ -9,8 +9,6 @@ allowed-tools:
   # Bash(python3:*) rode an A11 exemption whose own preamble excludes
   # target-facing skills — this skill clones and audits third-party
   # repos, so it IS target-facing and gets anchored grants like triage).
-  - Bash(python3 *traust/harnessing/recall-benchmark/scripts/bootstrap_benchmark_targets.py:*)
-  - Bash(python3 *traust/harnessing/recall-benchmark/scripts/match_benchmark.py:*)
   - Bash(python3 *traust/harnessing/recall-benchmark/scripts/build_canaries.py:*)
   - Bash(git clone:*)
   - Bash(git -C * rev-parse:*)
@@ -25,6 +23,8 @@ allowed-tools:
 ---
 
 # Detection-Recall Benchmark
+
+> **Being ported to traust-core** (progress-tracker skill port 35, recall-benchmark): bootstrap_benchmark_targets.py, match_benchmark.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
@@ -61,7 +61,7 @@ measurable (capability C1 of the roadmap;
 ### `bootstrap` — harvest candidates from the disposition ledger
 
 ```bash
-python3 harnessing/recall-benchmark/scripts/bootstrap_benchmark_targets.py \
+python3 RETIRED:bootstrap_benchmark_targets.py \
     --results-root ../analysis-results --out /tmp/benchmark-candidates.yaml
 ```
 
@@ -162,7 +162,7 @@ For each admitted (non-held-out unless `--release`) target, optionally
 ### `score`
 
 ```bash
-python3 harnessing/recall-benchmark/scripts/match_benchmark.py \
+python3 RETIRED:match_benchmark.py \
     --manifest "$TRAUST_CONFIG_HOME/benchmark-targets.yaml" \
     --runs-dir /tmp/recall-bench/runs \
     --out-dir progress-tracker/metrics/dashboards/benchmark [--include-held-out]

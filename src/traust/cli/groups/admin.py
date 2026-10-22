@@ -16,11 +16,6 @@ _ENTRIES: tuple[tuple[str, str, str], ...] = (
         "Checkpoint helper for the runbook skills (vuln-scan, triage, verify).",
     ),
     (
-        "countersign",
-        "countersign",
-        "Countersign workbench: the human inbox for the disposition ledger.",
-    ),
-    (
         "scan-internal-refs",
         "scan_internal_refs",
         "Pre-publication scrub: organization-internal references in a report tree.",

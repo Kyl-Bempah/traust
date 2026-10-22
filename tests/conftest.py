@@ -65,45 +65,19 @@ def _resolve_progress_tracker() -> Path:
 os.environ["TRAUST_CONFIG_HOME"] = str(_TEST_HOME)
 os.environ["HARNESS_TEST_FIXTURE_CONFIG"] = "1"
 
-# Ledger >=0.7 verifies the actor on every write. Give the suite a real local
-# identity (auto-minted ES256, iss=local) in an isolated config dir so it never
-# reads the developer's ~/.config/traust-ledger. The ledger's config_dir() is
-# $HOME/.config/traust-ledger with no override, hence HOME. See CONTRIBUTING.md
-# "Ledger auth in tests".
-_LEDGER_HOME = _TEST_HOME / "ledger-home"
-_LEDGER_HOME.mkdir(parents=True, exist_ok=True)
-os.environ["HOME"] = str(_LEDGER_HOME)
-for _k in ("LAAS_TOKEN", "LEDGER_TOKEN", "LEDGER_TOKEN_PATH", "LEDGER_LOCAL_MACHINE"):
-    os.environ.pop(_k, None)
-os.environ["LEDGER_LOCAL_IDENTITY"] = "test@traust.local"
-# Ledger 0.9.0: local tokens are no longer identity_verified by default (one
-# person could otherwise hold two local identities and satisfy the two-person
-# rule alone). This suite's fixture identity stands in for a human reviewer
-# on purpose, so opt this test deployment back in -- same flag a real
-# solo/offline deployment sets. See ledger CHANGELOG.md [0.9.0] Security.
-os.environ["LEDGER_TRUST_LOCAL_IDENTITY"] = "1"
+# Isolated HOME: core's default store (~/.traust) and anything else keyed on
+# HOME never touches the developer's home directory.
+_HOME = _TEST_HOME / "home"
+_HOME.mkdir(parents=True, exist_ok=True)
+os.environ["HOME"] = str(_HOME)
 
-try:
-    from traust_ledger.auth.config import resolve_auth
-
-    _ledger_auth_source = resolve_auth().source
-except Exception as _exc:
-    raise pytest.UsageError(
-        f"ledger local auth could not be provisioned ({_exc}); "
-        'see CONTRIBUTING.md "Ledger auth in tests"'
-    ) from _exc
-if _ledger_auth_source != "auto-mint":
-    raise pytest.UsageError(
-        f"ledger auth resolved from {_ledger_auth_source!r}, expected the suite's "
-        'auto-minted local identity; see CONTRIBUTING.md "Ledger auth in tests"'
-    )
 assert _TEST_HOME.resolve() != TRAUST_CONFIG_HOME_DEFAULT.resolve(), (
     "test suite must not inherit ~/.traust/config"
 )
 
 from traust.paths import skill_dir
 
-# Tier 0: traust-engine, traust-contracts, traust-ledger via uv workspace.
+# Tier 0: traust-core (contracts and ledger through it) and traust-engine.
 # Tier 2: skill scripts import traust_engine.* directly (no flat aliases).
 
 # Resolved by skill NAME, not by a hardcoded depth: a workflow skill sits at

@@ -5,7 +5,6 @@ argument-hint: "[summary] [open] [<workspace-root-path>]"
 metadata:
   harness.tier: "secondary"
 allowed-tools:
-  - Bash(python3 *traust/harnessing/census/scripts/build_census.py:*)
   - Bash(python3 *traust* -m traust.cli corpus findings-db:*)
   - Bash(python3 *traust/harnessing/census/scripts/check_repo_liveness.py:*)
   - Bash(ls:*)
@@ -16,6 +15,8 @@ allowed-tools:
 ---
 
 # Corpus Census — population, duplication, distinct vulnerabilities
+
+> **Being ported to traust-core** (progress-tracker skill port 09, census): build_census.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
 
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
@@ -57,7 +58,7 @@ If neither contains `analysis-results/`, ask the user for the path.
 ### Step 2 — Run the harness script
 
 ```bash
-python3 harnessing/census/scripts/build_census.py \
+python3 RETIRED:build_census.py \
     [--workspace-root <resolved-root>] \
     [--summary]
 ```

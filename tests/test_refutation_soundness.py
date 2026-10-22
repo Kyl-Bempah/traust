@@ -27,10 +27,6 @@ from ingest import Finding, Normalized
 from report import build_validation_json
 from scope import ClusterScope, Scope
 
-from traust.cli.emit_validation_ledger_events import (
-    AuditResolver,
-    build_events,
-)
 from traust.ops import lint_refutation_soundness as lint
 
 FORBIDDEN = (
@@ -416,136 +412,9 @@ def _mk_corpus(
     return results, report, report_path
 
 
-class TestLedgerRouting:
-    def _build(self, tmp_path, **kw):
-        install_failure = kw.pop("install_failure", False)
-        results, report, _report_path = _mk_corpus(tmp_path, install_failure=install_failure, **kw)
-        resolver = AuditResolver(results, tmp_path)
-        return build_events(
-            report,
-            "validations/prodA/prodA-validation.json",
-            resolver,
-            RECORDED,
-            install_failure=install_failure,
-        )
-
-    def test_unsound_refutation_routes_to_needs_review(self, tmp_path):
-        out = self._build(tmp_path, observed=FORBIDDEN)
-        assert out["counts"]["unsound"] == 1
-        assert out["counts"]["refuted"] == 0
-        bucket = next(iter(out["per_audit"].values()))
-        assert bucket["events"] == []
-        assert bucket["register"] == []
-        item = bucket["needs_review"][0]
-        assert item["queue_reason"] == "unsound_refutation"
-        assert item["suggested_finding_ref"] == "FIND-001"
-        assert "error-signature:forbidden" in item["quote"]
-        assert item["status"] == "pending"
-
-    def test_engine_stamped_inconclusive_routes_too(self, tmp_path):
-        out = self._build(
-            tmp_path,
-            verdict="inconclusive",
-            soundness_flag="rbac-zero-subjects",
-            observed=RBAC_EMPTY,
-        )
-        assert out["counts"]["unsound"] == 1
-        bucket = next(iter(out["per_audit"].values()))
-        assert bucket["events"] == []
-        assert bucket["needs_review"][0]["queue_reason"] == "unsound_refutation"
-
-    def test_install_failure_gates_whole_report(self, tmp_path):
-        out = self._build(tmp_path, observed=RBAC_CONCRETE, install_failure=True)
-        assert out["counts"]["unsound"] == 1
-        bucket = next(iter(out["per_audit"].values()))
-        assert bucket["events"] == []
-        assert "target-not-deployed" in bucket["needs_review"][0]["quote"]
-
-    def test_sound_refutation_still_emits_fp_event(self, tmp_path):
-        out = self._build(tmp_path, observed=RBAC_CONCRETE)
-        assert out["counts"]["refuted"] == 1
-        assert out["counts"]["unsound"] == 0
-        bucket = next(iter(out["per_audit"].values()))
-        assert bucket["events"][0]["disposition"]["validity"] == "false_positive"
-        assert bucket["register"]
-        assert bucket["needs_review"] == []
-
-    def test_plain_inconclusive_still_no_event(self, tmp_path):
-        out = self._build(tmp_path, verdict="inconclusive", observed="")
-        assert out["counts"]["no_event"] == 1
-        assert out["per_audit"] == {}
-
-
 # ======================================================================
 # countersign.py — raw probe output on cards
 # ======================================================================
-
-
-class TestCountersignRawObserved:
-    def _mk_tree(self, tmp_path):
-        results, _report, _report_path = _mk_corpus(tmp_path)
-        layer_dir = results / "findings" / "prodA" / "repoX"
-        layer = layer_dir / "repoX-findings-layer.json"
-        layer.write_text(json.dumps({"metadata": {}, "events": [], "needs_review": []}))
-        item = {
-            "layer": str(layer),
-            "finding": {
-                "id": "FIND-001",
-                "title": "over-broad RBAC",
-                "severity": "high",
-                "description": "wildcard ClusterRole",
-                "locations": [{"path": "config/rbac/role.yaml"}],
-            },
-            "triage": None,
-            "disposition": {},
-            "refutation": {
-                "recorded_at": RECORDED,
-                "occurred_at": RECORDED,
-                "source": {
-                    "type": "validation_report",
-                    "ref": "validations/prodA/prodA-validation.json",
-                    "actor": {"kind": "machine", "identity": "validate-findings/0.1.0"},
-                },
-                "rationale": "live validation (replay): refuted — claim did not reproduce",
-                "evidence_refs": [],
-            },
-        }
-        return item
-
-    def test_raw_observed_resolves_from_report(self, tmp_path):
-        from traust.cli import countersign as cs
-
-        cs._REPORT_CACHE.clear()
-        item = self._mk_tree(tmp_path)
-        raw, why = cs.raw_probe_observed(item)
-        assert why == ""
-        assert raw == FORBIDDEN
-
-    def test_card_renders_raw_output_verbatim(self, tmp_path):
-        from traust.cli import countersign as cs
-
-        cs._REPORT_CACHE.clear()
-        item = self._mk_tree(tmp_path)
-        card = cs.render_card(item, 1, 1, tmp_path)
-        assert "RAW PROBE OUTPUT" in card
-        assert 'User "probe-sa" cannot list resource "pods"' in card
-
-    def test_unavailable_raw_output_is_flagged_on_card(self, tmp_path):
-        from traust.cli import countersign as cs
-
-        cs._REPORT_CACHE.clear()
-        item = self._mk_tree(tmp_path)
-        item["refutation"]["source"]["ref"] = "validations/nope/x.json"
-        card = cs.render_card(item, 1, 1, tmp_path)
-        assert "RAW PROBE OUTPUT:** unavailable" in card
-
-    def test_triage_refutation_card_unchanged(self, tmp_path):
-        from traust.cli import countersign as cs
-
-        item = self._mk_tree(tmp_path)
-        item["refutation"]["source"]["type"] = "triage_report"
-        card = cs.render_card(item, 1, 1, tmp_path)
-        assert "RAW PROBE OUTPUT" not in card
 
 
 # ======================================================================

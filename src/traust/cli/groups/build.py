@@ -5,7 +5,6 @@ from __future__ import annotations
 from traust.cli.groups._registry import passthrough_op
 
 _ENTRIES: tuple[tuple[str, str, str], ...] = (
-    ("cumulative", "build_cumulative", "Deterministic merge engine for the track-findings skill."),
     (
         "rescan-worklist",
         "build_rescan_worklist",

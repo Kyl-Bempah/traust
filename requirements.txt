@@ -1,8 +1,7 @@
-ldap3
 jsonschema[format-nongpl]>=4.0
 referencing
 pyyaml
 playwright
-PyJWT[crypto]>=2.8
-pydantic>=2.0
+pydantic>=2.6
+sqlalchemy>=2.0
 pytest

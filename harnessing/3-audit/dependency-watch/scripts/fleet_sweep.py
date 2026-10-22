@@ -13,9 +13,9 @@ queried against the OSV batch API, deduplicated by advisory display id
 / Shai-Hulud advisories are NOT dropped), and banded by advisory
 severity (malware bands CRITICAL). Output is a persisted, reviewable
 inventory artifact plus a staged worklist of ready-to-run
-run_impact_analysis.py / route_impact_findings.py commands — this
-script routes and inventories only; affectedness judgment stays with
-/impact-analysis and filing with route_impact_findings.py.
+run_impact_analysis.py commands — this script routes and inventories
+only; affectedness judgment stays with /impact-analysis. Filing affected
+findings is the impact-analysis skill port's (traust-core finding intake).
 
 Staging discipline (precision posture): CVEs whose in-range repo count
 exceeds --deep-scan-cap get graph-only impact commands (--skip-scan;
@@ -510,18 +510,6 @@ def build_worklist(
                 ]
                 + ([] if deep else ["--skip-scan"])
             )
-            route_argv = (
-                [
-                    "python3",
-                    "-m",
-                    "traust.cli.route_impact_findings",
-                    str(impact_out),
-                    "--severity",
-                    band.lower(),
-                ]
-                if deep
-                else None
-            )
             # argv arrays ONLY — a consumer that joins these into a
             # shell string re-opens H1; run them with subprocess(list)
             # or safe_exec, never bash -c.
@@ -529,7 +517,6 @@ def build_worklist(
                 {
                     "module": m,
                     "impact_argv": impact_argv,
-                    "route_argv": route_argv,
                     "deep": deep,
                     # provenance metadata only — NOT in impact_argv
                     "manifest": manifest,

@@ -8,7 +8,6 @@ from traust.cli.groups import (
     build,
     check,
     compliance,
-    corpus,
     dashboard,
     feeds,
     impact,
@@ -17,7 +16,6 @@ from traust.cli.groups import (
     portfolio,
     registry,
     reporting,
-    route,
     sweep,
     tools,
     util,
@@ -41,13 +39,6 @@ GROUPS: dict[str, dict[str, object]] = {
     "compliance": {
         "dashboard": compliance.DASHBOARD,
         "scope": compliance.SCOPE,
-    },
-    "corpus": {
-        "findings-db": corpus.FINDINGS_DB,
-        "precedent": corpus.PRECEDENT,
-        "summary": corpus.SUMMARY,
-        "resolve": corpus.RESOLVE,
-        "finding-identity": corpus.FINDING_IDENTITY,
     },
     "dashboard": dict(dashboard.DASHBOARD),
     "feeds": dict(feeds.FEEDS),
@@ -85,7 +76,6 @@ GROUPS: dict[str, dict[str, object]] = {
         "rate-threats": reporting.RATE_THREATS,
         "sarif": reporting.SARIF,
     },
-    "route": dict(route.ROUTE),
     "sweep": {
         "collect": sweep.COLLECT,
         "draft": sweep.DRAFT,

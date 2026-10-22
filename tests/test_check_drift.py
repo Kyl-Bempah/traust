@@ -194,46 +194,6 @@ def test_watched_feeds_is_driven_from_fetch_feeds(tmp_path):
     assert watched["epss"] is False
 
 
-def test_findings_db_stale_when_ledger_newer(tmp_path):
-    import sqlite3
-
-    ws = _mk_ws(tmp_path)
-    db = ws / "analysis-results/graph/findings.db"
-    con = sqlite3.connect(db)
-    con.execute("CREATE TABLE meta (key TEXT, value TEXT)")
-    past = cd._now() - datetime.timedelta(days=3)
-    con.execute("INSERT INTO meta VALUES ('built_at', ?)", (_iso(past),))
-    con.commit()
-    con.close()
-    ledger = ws / "analysis-results/findings/p" / "r-findings-layer.json"
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text("{}")  # mtime = now > built_at
-    res = cd.check_findings_db(ws)[0]
-    assert res["status"] == "stale"
-    assert "corpus findings-db" in res["refresh"]
-
-
-def test_fp_precedent_cache_pending_fresh_stale(tmp_path):
-    ws = _mk_ws(tmp_path)
-    cache = ws / "analysis-results/graph/fp-precedent-cache.json"
-    # pending: not built
-    assert cd.check_fp_precedent_cache(ws)[0]["status"] == "pending"
-    # stale: ledger newer than the cache's generated stamp
-    past = cd._now() - datetime.timedelta(days=3)
-    cache.write_text(json.dumps({"metadata": {"generated": _iso(past)}}))
-    ledger = ws / "analysis-results/findings/p" / "r-findings-layer.json"
-    ledger.parent.mkdir(parents=True)
-    ledger.write_text("{}")  # mtime = now > generated
-    res = cd.check_fp_precedent_cache(ws)[0]
-    assert res["status"] == "stale"
-    assert "traust.cli corpus precedent" in res["refresh"]
-    # fresh: cache rebuilt after the newest ledger event — stamped in
-    # the builder's own isoformat-with-offset form, not Z
-    future = cd._now() + datetime.timedelta(minutes=5)
-    cache.write_text(json.dumps({"metadata": {"generated": future.isoformat(timespec="seconds")}}))
-    assert cd.check_fp_precedent_cache(ws)[0]["status"] == "fresh"
-
-
 def test_rule_mining_pending_fresh_stale(tmp_path):
     import os
 
@@ -365,70 +325,11 @@ def test_checker_error_never_kills_run(tmp_path, monkeypatch):
         raise RuntimeError("kaput")
 
     monkeypatch.setattr(cd, "CHECKS", (boom,))
-    monkeypatch.setattr(cd, "ENGINE_CHECKS", ())
     monkeypatch.setattr(cd, "check_feeds", lambda _engine: [])
     rc = cd.main(["--workspace", str(ws)])
     assert rc == 0
     report = json.loads((ws / "progress-tracker/metrics/drift/drift-report.json").read_text())
     assert any(i["item"] == "boom" and i["status"] == "unavailable" for i in report["items"])
-
-
-def _audit_report(ws, rel, ref=None, ref_kind="branch"):
-    """Minimal audit JSON under ws/analysis-results/findings/<rel>,
-    optionally declaring metadata.ref (branch-awareness Phase 0)."""
-    p = ws / "analysis-results" / "findings" / rel
-    p.parent.mkdir(parents=True, exist_ok=True)
-    md = {"repository": "https://github.com/org/x"}
-    if ref:
-        md["ref"] = ref
-        md["ref_kind"] = ref_kind
-    p.write_text(json.dumps({"metadata": md, "findings": []}), encoding="utf-8")
-    return p
-
-
-@_needs_operational_config
-def test_ref_provenance_agree_and_absent_are_fresh(tmp_path):
-    ws = _mk_ws(tmp_path)
-    # agree: slug and declared metadata.ref name the same branch
-    _audit_report(
-        ws, "prod/repo1__release-4.19/repo1__release-4.19-security-audit.json", ref="release-4.19"
-    )
-    # absent (slug only): legacy report, declares nothing — not comparable
-    _audit_report(ws, "prod/repo2__release-4.19/repo2__release-4.19-security-audit.json")
-    # absent (declared only): no slug ref — not comparable either
-    _audit_report(ws, "prod/repo3/repo3-security-audit.json", ref="release-4.20")
-    res = cd.check_ref_provenance(ws, load_engine())[0]
-    assert res["status"] == "fresh"
-    assert "2 report(s) declare metadata.ref" in res["detail"]
-
-
-@_needs_operational_config
-def test_ref_provenance_disagreement_is_drift(tmp_path):
-    ws = _mk_ws(tmp_path)
-    _audit_report(
-        ws, "prod/repo1__release-4.19/repo1__release-4.19-security-audit.json", ref="release-4.20"
-    )
-    res = cd.check_ref_provenance(ws, load_engine())[0]
-    assert res["status"] == "drift"
-    assert "release-4.19" in res["detail"]
-    assert "release-4.20" in res["detail"]
-    assert "human" in res["refresh"]
-
-
-@_needs_operational_config
-def test_ref_provenance_live_tree_zero_disagreements():
-    """Live-tree canary (branch-awareness Phase 4): zero disagreements
-    expected today. Phase-0 writers have begun landing declared refs
-    (all `main`/`default` stamps on slug-less reports as of 2026-07-21,
-    so nothing is comparable yet) — the declared COUNT grows with
-    adoption and is deliberately not pinned; only a slug/declared
-    disagreement may ever flip this to drift."""
-    ws = _ROOT.parent
-    if not (ws / "analysis-results" / "findings").is_dir():
-        pytest.skip("live analysis-results tree not checked out")
-    res = cd.check_ref_provenance(ws, load_engine())[0]
-    assert res["status"] == "fresh", res
-    assert "no slug/declared ref disagreement" in res["detail"]
 
 
 def test_framework_upstream_pin_check(tmp_path, monkeypatch):
@@ -1410,88 +1311,6 @@ def test_dependency_pin_check_is_registered():
 # --------------------------------------------------------------------------
 
 
-def _mk_audit(ws, findings, repo="https://github.com/org/repo"):
-    d = ws / "analysis-results" / "findings" / "repo"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "repo-security-audit.json").write_text(
-        json.dumps({"metadata": {"repository": repo}, "findings": findings})
-    )
-    return ws
-
-
-def _stamped(**over):
-    """A correctly stamped finding; an explicit fingerprint= override wins."""
-    from traust_engine.ledger import fingerprint
-
-    f = {"id": "R-abc1234-001", "cwes": ["CWE-79"], "locations": [{"path": "src/a.go"}]}
-    f.update({k: v for k, v in over.items() if k != "fingerprint"})
-    f["fingerprint"] = over.get("fingerprint", fingerprint(f, "https://github.com/org/repo"))
-    return f
-
-
-def test_identity_sweep_all_stamped_is_fresh(tmp_path):
-    items = cd.check_finding_identity(_mk_audit(tmp_path, [_stamped()]))
-    assert {i["status"] for i in items} == {"fresh"}
-
-
-def test_identity_sweep_flags_an_unstamped_finding(tmp_path):
-    f = _stamped()
-    del f["fingerprint"]
-    items = [
-        i for i in cd.check_finding_identity(_mk_audit(tmp_path, [f])) if i["status"] != "fresh"
-    ]
-    assert [i["item"] for i in items] == ["identity:unstamped-findings"]
-    assert items[0]["status"] == "drift"
-
-
-def test_identity_sweep_flags_a_stamp_the_recipe_does_not_produce(tmp_path):
-    """A value not written by traust_ledger.identity is not a cross-scan identity."""
-    items = [
-        i
-        for i in cd.check_finding_identity(_mk_audit(tmp_path, [_stamped(fingerprint="0" * 64)]))
-        if i["status"] != "fresh"
-    ]
-    assert [i["item"] for i in items] == ["identity:non-reproducing-stamps"]
-    assert items[0]["status"] == "drift"
-
-
-def test_identity_sweep_counts_degenerate_identities(tmp_path):
-    """Hashes fine, identifies nothing: the residue blocking the strict flip."""
-    items = [
-        i
-        for i in cd.check_finding_identity(
-            _mk_audit(tmp_path, [_stamped(locations=[{"path": "."}])])
-        )
-        if i["status"] != "fresh"
-    ]
-    assert [i["item"] for i in items] == ["identity:degenerate-findings"]
-    assert "1 of 1" in items[0]["detail"]
-
-
-def test_identity_sweep_reports_unreadable_rather_than_passing(tmp_path):
-    d = tmp_path / "analysis-results" / "findings" / "repo"
-    d.mkdir(parents=True)
-    (d / "repo-security-audit.json").write_text("{not json")
-    items = cd.check_finding_identity(tmp_path)
-    assert items[0]["status"] == "unavailable"
-
-
-def test_identity_sweep_skips_working_state_directories(tmp_path):
-    """.triage-state and friends hold scratch copies, not corpus artifacts."""
-    d = tmp_path / "analysis-results" / "findings" / ".triage-state"
-    d.mkdir(parents=True)
-    f = _stamped()
-    del f["fingerprint"]
-    (d / "x-security-audit.json").write_text(
-        json.dumps({"metadata": {"repository": "https://github.com/org/repo"}, "findings": [f]})
-    )
-    assert cd.check_finding_identity(tmp_path)[0]["status"] == "unavailable"
-
-
-def test_identity_sweep_is_registered():
-    assert cd.check_finding_identity in cd.CHECKS
-
-
 def test_render_md_survives_the_info_status():
     """Two checks emit `info`; the renderer's order tuple omitted it and raised."""
     md = cd.render_md(
@@ -1511,55 +1330,6 @@ def test_render_md_tolerates_an_unknown_status():
         }
     )
     assert "brand-new" in md
-
-
-def test_identity_sweep_counts_within_report_collisions(tmp_path):
-    """Two findings, same file, same CWE, different vulnerability, one identity."""
-    from traust_engine.ledger import fingerprint
-
-    a = {
-        "id": "R-abc1234-001",
-        "title": "SSO creds in plaintext",
-        "cwes": ["CWE-798"],
-        "locations": [{"path": "a.go"}],
-    }
-    b = {
-        "id": "R-abc1234-002",
-        "title": "Slack webhook in plaintext",
-        "cwes": ["CWE-798"],
-        "locations": [{"path": "a.go"}],
-    }
-    for f in (a, b):
-        f["fingerprint"] = fingerprint(f, "https://github.com/org/repo")
-    assert a["fingerprint"] == b["fingerprint"]
-    items = {i["item"]: i for i in cd.check_finding_identity(_mk_audit(tmp_path, [a, b]))}
-    row = items["identity:colliding-fingerprints"]
-    assert row["status"] == "info"
-    assert "1 of 2" in row["detail"]
-
-
-def test_degenerate_findings_are_not_double_counted_as_collisions(tmp_path):
-    """They collide by construction and the row above already owns them."""
-    from traust_engine.ledger import fingerprint
-
-    findings = []
-    for i in (1, 2):
-        f = {
-            "id": f"R-abc1234-00{i}",
-            "title": f"t{i}",
-            "cwes": ["CWE-1104"],
-            "locations": [{"path": "."}],
-        }
-        f["fingerprint"] = fingerprint(f, "https://github.com/org/repo")
-        findings.append(f)
-    items = {i["item"]: i for i in cd.check_finding_identity(_mk_audit(tmp_path, findings))}
-    assert items["identity:colliding-fingerprints"]["status"] == "fresh"
-    assert "2 of 2" in items["identity:degenerate-findings"]["detail"]
-
-
-def test_no_collisions_is_fresh(tmp_path):
-    items = {i["item"]: i for i in cd.check_finding_identity(_mk_audit(tmp_path, [_stamped()]))}
-    assert items["identity:colliding-fingerprints"]["status"] == "fresh"
 
 
 def _grype_status(monkeypatch, out, on_path=True):

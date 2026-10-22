@@ -37,7 +37,7 @@ audits of Red Hat Hybrid Platforms source code. Mounted as a volume by agent run
 # Data-only artifact — no entrypoint, no pip install in-image.
 # Consumers mount this tree (typically at /harness) and run Python from
 # a separately installed stack: traust + traust-engine +
-# traust-contracts + traust-ledger (pip/uv from pyproject.toml git tags).
+# traust-core, which pins traust-contracts + traust-ledger (pip/uv from pyproject.toml git pins).
 #
 # What lives where after the scripts/ → packages refactor:
 #   harnessing/          skills, per-skill scripts, rule-pack copies — YES (payload)

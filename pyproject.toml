@@ -13,21 +13,7 @@ description = "AI agent tooling for automated security audits of Red Hat Hybrid 
 requires-python = ">=3.11"
 dependencies = [
     "traust-engine",
-    # TODO: this should not be here. Declared only because a handful of call
-    # sites import traust_ledger DIRECTLY instead of going through
-    # traust_engine.ledger.LedgerService, which is the intended seam:
-    #   cli/countersign.py            traust_ledger.auth.directory,
-    #                                 traust_ledger.cli.identity.actor
-    #   cli/check_drift.py            traust_ledger.api.integrity
-    #   harnessing/3-audit/compliance-check/scripts/compliance_scope_intake.py
-    # Until now it resolved only because traust-engine happens to pull the
-    # ledger in transitively — an undeclared dependency that would break at
-    # import time (countersign, compliance-check) the moment engine stopped
-    # depending on it. Some more restructuring will help alleviate this pain later.
-    # Route these through LedgerService and drop this line. countersign.py is
-    # itself a candidate for removal, which retires most of the callers.
-    "traust-ledger",
-    "traust-contracts",
+    "traust-core",
     "jsonschema",
     "referencing",
     "pyyaml",
@@ -44,19 +30,16 @@ graph = [
     "tree-sitter-javascript",
 ]
 signing = ["sigstore>=4.0,<5.0"]
-# ledger.yaml with a dsn (Ledger database as the authority) needs the DB backend.
-ledger-db = ["traust-ledger[db]"]
 
 [project.scripts]
 traust = "traust.cli.__main__:main"
 
 [dependency-groups]
-dev = ["ruff>=0.6", "pytest-xdist>=3", "traust-ledger[db]"]
+dev = ["ruff>=0.6", "pytest-xdist>=3"]
 
 [tool.uv.sources]
-traust-contracts = { git = "https://github.com/traust-security/traust-contracts.git", rev = "84bd8e4f6cda7431fb4a1321b1d10715f2220860" }
-traust-engine = { git = "https://github.com/traust-security/traust-engine.git", rev = "88c8065f4509cc3d3b228cce3413584425b44413" }
-traust-ledger = { git = "https://github.com/traust-security/traust-ledger.git", rev = "c3e6d2ebb1c3105e3ddf9c262198a9514d94291e" }
+traust-core = { git = "https://github.com/traust-security/traust-core.git", rev = "92eb766ac7a878332cbf4894dd2095568c83e762" }
+traust-engine = { git = "https://github.com/traust-security/traust-engine.git", rev = "263e45b8e22a94ac5e262ca9d015c0bd86fdb3f8" }
 
 # Multi-skill CLIs live under src/traust/; harnessing/<skill>/ for single-skill
 # scripts. Install for deps + importable path helpers.

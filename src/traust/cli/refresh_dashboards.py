@@ -34,7 +34,6 @@ from pathlib import Path
 from traust.context import (
     add_config_home_arg,
     load_engine,
-    progress_tracker_dir,
     resolve_results_root,
     workspace_dir,
 )
@@ -64,12 +63,10 @@ def build_stages(
     spend_actuals: bool,
     *,
     config_home: Path | None = None,
-    progress_tracker: Path | None = None,
 ):
     """Ordered (name, tier, argv) stage list. tier: projection stages
     abort the run on failure; consumer stages continue-on-error."""
     h = HARNESS_ROOT
-    pt = progress_tracker or (workspace / "progress-tracker")
     path_args = _engine_path_args(config_home, results_root)
     cfg = _config_home_arg(config_home)
     stages = [
@@ -83,58 +80,6 @@ def build_stages(
             [PYTHON, "-m", "traust.cli.fetch_feeds", "--feed", "rh-cve", *cfg],
         ),
         (
-            "cve-provenance",
-            "consumer",
-            [
-                PYTHON,
-                "-m",
-                "traust.cli.reconcile_cve_provenance",
-                *path_args,
-                "--apply",
-                "--report",
-                str(pt / "metrics" / "first-discovery" / "first-discovery-current.json"),
-            ],
-        ),
-        (
-            "findings-db",
-            "projection",
-            [PYTHON, "-m", "traust.cli", "corpus", "findings-db", *path_args],
-        ),
-        (
-            "census",
-            "projection",
-            [
-                PYTHON,
-                str(h / "harnessing/census/scripts/build_census.py"),
-                *path_args,
-                "--workspace-root",
-                str(workspace),
-            ],
-        ),
-        (
-            "exec-summary",
-            "consumer",
-            [
-                PYTHON,
-                str(h / "harnessing/executive-summary-findings/scripts/build_executive_summary.py"),
-                *path_args,
-            ],
-        ),
-        (
-            "trends",
-            "consumer",
-            [PYTHON, str(h / "harnessing/findings-trends/scripts/build_trends.py"), *path_args],
-        ),
-        (
-            "insecure-patterns",
-            "consumer",
-            [
-                PYTHON,
-                str(h / "harnessing/insecure-patterns/scripts/build_insecure_patterns.py"),
-                *path_args,
-            ],
-        ),
-        (
             "validation-fuzz",
             "consumer",
             [
@@ -144,17 +89,6 @@ def build_stages(
                     "build_validation_fuzz_dashboard.py"
                 ),
                 *path_args,
-            ],
-        ),
-        (
-            "rbac-tenancy",
-            "consumer",
-            [
-                PYTHON,
-                str(h / "harnessing/rbac-tenancy-rollup/scripts/build_rbac_tenancy_rollup.py"),
-                *cfg,
-                "--analysis-results",
-                str(results_root),
             ],
         ),
         ("sla", "consumer", [PYTHON, "-m", "traust.cli", "metrics", "sla", *cfg]),
@@ -283,7 +217,6 @@ def main(argv=None):
     engine = load_engine(args.config_home)
     workspace = (args.workspace_root or workspace_dir(engine)).resolve()
     results_root = resolve_results_root(args)
-    tracker = progress_tracker_dir(engine)
     spend_actuals = args.spend_actuals or args.list or "spend-actuals" in (args.only or [])
     stages = build_stages(
         workspace,
@@ -291,7 +224,6 @@ def main(argv=None):
         args.note,
         spend_actuals,
         config_home=args.config_home,
-        progress_tracker=tracker,
     )
 
     if args.list:

@@ -1,8 +1,8 @@
-"""The app's single composition root for traust-engine.
+"""The app's single composition root: traust-core's services and traust-engine.
 
-Every entry point resolves the engine here, once, and threads it (or the one ops
-namespace it needs) into its workers. Nothing else in the app calls
-HarnessEngine.load(); nothing reaches into traust_engine.* config internals.
+Every entry point resolves them here, once, and threads them into its workers.
+Domain state goes through core's services (:func:`load_services`); the engine is
+for executors. Nothing else in the app calls ``Context`` or ``HarnessEngine.load()``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,11 @@ from pathlib import Path
 
 from traust_contracts import DeploymentConfigMissing
 from traust_contracts.config import deployment_config_dir
+from traust_core.v1.context import Config, Context, Services
+from traust_core.v1.errors import ConfigError
 from traust_engine import HarnessEngine, locations
+
+CORE_CONFIG = "core.yaml"
 
 # ---------------------------------------------------------------------------
 # Sanctioned environment overrides — read ONLY in this module, never in consumers.
@@ -63,6 +67,26 @@ def load_engine(config_home: Path | None = None) -> HarnessEngine:
         raise SystemExit(2) from e
 
 
+def load_core(config_home: Path | None = None) -> Context:
+    """traust-core's context from ``<config home>/core.yaml``, or exit 2 when it is invalid.
+
+    No ``core.yaml``: core's defaults (SQLite and artifacts under ``~/.traust``),
+    the zero-setup laptop install.
+    """
+    home = config_home or deployment_config_dir()
+    path = home / CORE_CONFIG if home is not None else None
+    try:
+        return Context.from_file(path) if path is not None and path.is_file() else Context(Config())
+    except ConfigError as e:
+        print(f"core config not resolvable: {e}", file=sys.stderr)
+        raise SystemExit(2) from e
+
+
+def load_services(config_home: Path | None = None) -> Services:
+    """traust-core's domain services: the one code path for domain state."""
+    return load_core(config_home).services()
+
+
 def add_config_home_arg(parser) -> None:
     """Standard --config-home flag so every CLI resolves config the same way."""
     parser.add_argument(
@@ -71,40 +95,6 @@ def add_config_home_arg(parser) -> None:
         default=None,
         help="TRAUST config home (default: $TRAUST_CONFIG_HOME)",
     )
-
-
-def add_ledger_binding_args(parser) -> None:
-    """Standard --ledger-layer / --product-repo flags: the run's ledger layer.
-
-    Required when ``ledger.yaml`` sets a ``dsn`` (the database ledger is never
-    addressed by file name); refused otherwise. Given both, the layer must belong
-    to the product_repo.
-    """
-    group = parser.add_argument_group("ledger layer (when ledger.yaml sets a dsn)")
-    group.add_argument("--ledger-layer", default=None, help="the run's Ledger layer ID")
-    group.add_argument(
-        "--product-repo", default=None, help="product_repo whose Ledger layer this run uses"
-    )
-
-
-def ledger_binding_argv(args) -> list[str]:
-    """The binding flags to forward to a child traust CLI (empty when unbound)."""
-    argv: list[str] = []
-    if getattr(args, "ledger_layer", None):
-        argv += ["--ledger-layer", args.ledger_layer]
-    if getattr(args, "product_repo", None):
-        argv += ["--product-repo", args.product_repo]
-    return argv
-
-
-def bind_ledger(engine: HarnessEngine, args) -> None:
-    """Bind the run's ledger layer from --ledger-layer / --product-repo, if given."""
-    from traust_engine.ledger import LayerBinding
-
-    layer_id = getattr(args, "ledger_layer", None)
-    product_repo_id = getattr(args, "product_repo", None)
-    if layer_id or product_repo_id:
-        engine.ledger.bind(LayerBinding(layer_id=layer_id, product_repo_id=product_repo_id))
 
 
 def analysis_results_dir(engine: HarnessEngine) -> Path:
@@ -267,20 +257,6 @@ def feeds_cache_dir(engine: HarnessEngine) -> Path:
 def findings_tree_dir(engine: HarnessEngine) -> Path:
     """``<analysis-results>/findings`` (fail-loud when analysis_results unset)."""
     return analysis_results_dir(engine) / "findings"
-
-
-def default_findings_roots(
-    engine: HarnessEngine,
-    audit_path: Path,
-) -> list[Path]:
-    """Path-confinement roots for ledger/triage writes under configured findings."""
-    findings = findings_tree_dir(engine)
-    parent = audit_path.resolve().parent
-    try:
-        parent.relative_to(findings)
-        return [parent, findings]
-    except ValueError:
-        return [findings]
 
 
 def resolve_results_root(args=None, *, config_home: Path | None = None) -> Path:

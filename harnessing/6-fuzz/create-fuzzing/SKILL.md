@@ -8,6 +8,8 @@ metadata:
 
 # Fuzz Harnesses
 
+> **Being ported to traust-core** (progress-tracker skill port 26, create-fuzzing): emit_fuzz_events.py retired with the traust-core hub (it ran on the old ledger / corpus code). The steps marked RETIRED don't run until the port lands.
+
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
 > `$TRAUST_CONFIG_HOME` (`docs/setup.md`, Storage locations); substitute your
@@ -196,8 +198,8 @@ For each crasher:
    what we know about a finding, and for months it held none of these.
 
    ```bash
-   python3 harnessing/6-fuzz/create-fuzzing/scripts/emit_fuzz_events.py   # dry run
-   python3 harnessing/6-fuzz/create-fuzzing/scripts/emit_fuzz_events.py --apply
+   python3 RETIRED:emit_fuzz_events.py   # dry run
+   python3 RETIRED:emit_fuzz_events.py --apply
    ```
 
    One event per crasher: `source.type: fuzz_report`, the bug record as
