@@ -22,6 +22,7 @@ The schemas below (from the installed `traust-contracts` package) are the comple
 | `schemas/v1/threat-model.schema.json` | JSON Schema for one subject's threat model. The authored artifact is Markdown (`<repo>-threat-model.md`); this is its contract form (`<repo>-threat-model.json`), emitted alongside it by `traust reporting threat-model-json` and projected into the `threat` table |
 | `schemas/v1/code-facts.schema.json` | JSON Schema for recorded code facts: deterministic symbols and measured language statistics, the artifact of a `tool_scan` assessment (traust-core `AssessmentService`) |
 | `schemas/v1/repo-state.schema.json` | JSON Schema for one forge observation of a repository (default-branch head, compared with its latest audit), the artifact of a `repo-state` assessment |
+| `schemas/v1/run-manifest.schema.json` | JSON Schema for an order's run manifest (`run_order.artifact_id`): config digests in force (the pack version), the budget verdict at admission, the approval, progress and degraded keys (traust-core `OpsService`) |
 | `schemas/v1/corpus-registry.schema.json` | JSON Schema for the corpus ownership registry — the subject→owner/business-unit mapping that every denominator divides by |
 | `schemas/v1/operator-priv-profile.schema.json` | JSON Schema for per-operator least-privilege profiles (`*-priv-profile.json`), parsed from shipped manifests — declared state, never a live cluster read |
 | `schemas/v1/adapter-result.schema.json` | JSON Schema for adapter results (contracts v0.2.0) |
