@@ -585,8 +585,8 @@ disposition state — the same invariant as every audit profile. Post-audit
 truth flows through the disposition ledger
 ([`docs/disposition-ledger.md`](../../../docs/disposition-ledger.md)):
 `/triage` and `/validate-findings` verdicts reach the ledger via
-python3 -m traust.cli ledger emit-triage /
-python3 -m traust.cli ledger emit-validation, and `/track-findings`
+`traust triage record` /
+validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core), and `/track-findings`
 regenerates the cumulative view. Container-specific rules:
 
 - **Naming.** The report shares its directory with the source repo's

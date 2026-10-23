@@ -63,7 +63,7 @@ Take the static outputs of `secure-code-audit`, `threat-model`, and `triage` and
 
 **Refuted findings stay in scope.** When a `<repo>-refuted-register.json`
 sits next to the audit report (emitted by
-python3 -m traust.cli ledger emit-triage), its entries are candidate targets,
+`traust triage record`), its entries are candidate targets,
 not exclusions: a finding dismissed as a false positive — even
 human-countersigned — is a falsifiable claim, and a reproducing exploit
 from this skill overrides the assertion via evidence-class precedence
@@ -416,7 +416,7 @@ validation report's path in `source_findings` — the validation report is
 **class-1 (execution-verified) evidence** for it. The finding enters at
 `validation_status: not_verified` like every routed append; its
 execution-confirmed validity then flows through the standard ledger path
-(python3 -m traust.cli ledger emit-validation / `/track-findings`), where
+(validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core) / `/track-findings`), where
 the E0/E1 evidence-grade rules decide whether it sets `confirmed`.
 Distinct from the P5 discovery-sweep *candidates* above
 (`origin: validation-discovery`): those are unexecuted hypotheses and
@@ -521,7 +521,7 @@ Consumed artifacts (producer named per artifact):
 Emitted artifacts:
 
 - `*-validation.json` — consumed by `/track-findings` via
-  python3 -m traust.cli ledger emit-validation (execution-verified
+  validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core) (execution-verified
   ledger events) and by `/validation-fuzz-dashboard`; class-1 evidence
   for routed novel findings (Phase 5 routing statement above).
 - `*-validation.md`, `validation-audit.jsonl`, `artifacts/` (incl.

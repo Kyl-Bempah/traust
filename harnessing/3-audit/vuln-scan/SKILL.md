@@ -934,7 +934,7 @@ Tell the user:
 
      `/triage` remains the **downstream adjudicator**: its verdicts, and
      any refutations, flow through the disposition ledger
-     (python3 -m traust.cli ledger emit-triage → `/track-findings`) —
+     (`traust triage record` → `/track-findings`) —
      **never hand-edit `validation_status` on existing baseline
      findings.**
    - No baseline? Recommend `/secure-code-audit <target>` to establish

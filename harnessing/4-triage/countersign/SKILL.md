@@ -35,6 +35,8 @@ allowed-tools:
 
 # countersign
 
+> **Being ported to traust-core** (progress-tracker skill port 03, countersign): `admin countersign` retired with the traust-core hub (it ran on the old ledger). The steps marked RETIRED don't run; traust-core's review queue (`AttestationService`, `FindingReview`) replaces the inbox.
+
 > **Paths.** `analysis-results/…` and `progress-tracker/…` in this skill are the
 > default workspace layout. They resolve through `locations.yaml` in
 > `$TRAUST_CONFIG_HOME` (`docs/setup.md`, Storage locations); substitute your
@@ -46,7 +48,7 @@ evidence pends (`refuted_awaiting_signoff`) until an identity-verified human
 decides; undetermined findings and audit-valve samples queue in
 `needs_review`. Both are derived state — this skill materializes them as
 decision cards and records the human's determinations through
-python3 -m traust.cli admin countersign, never by hand-assembling ledger events.
+RETIRED:admin countersign, never by hand-assembling ledger events.
 
 **Paths:** `<skill-base>` is this skill's base directory; `<harness>` =
 `<skill-base>/../../..`. The default findings root is the
@@ -66,7 +68,7 @@ nothing.
 ### 1. Build the inbox
 
 ```
-python3 -m traust.cli admin countersign queue \
+RETIRED:admin countersign queue \
     --root <findings-root> --out ./countersign-queue.md \
     --json-out ./countersign-queue.json --base <findings-root>/..
 ```
@@ -140,7 +142,7 @@ rationales blank so the tool applies the canonical adopted-determination
 framing), then ONE call:
 
 ```
-python3 -m traust.cli admin countersign apply ./countersign-queue.md
+RETIRED:admin countersign apply ./countersign-queue.md
 ```
 
 The workbench resolves the signer from the ledger token once and submits
@@ -186,10 +188,10 @@ adopt; a missing rationale gets exactly one follow-up, then the request
 is dropped and said so. Record via:
 
 ```
-python3 -m traust.cli admin countersign record \
+RETIRED:admin countersign record \
     --layer <repo>-findings-layer.json --finding <FIND-ID> \
     --decision reopen|override_false_positive --rationale "..."
-python3 -m traust.cli admin countersign record \
+RETIRED:admin countersign record \
     --layer ... --finding ... --decision severity --severity high \
     --rationale "..."
 ```

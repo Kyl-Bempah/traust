@@ -299,7 +299,7 @@ actually happened — E0/E1. An E2/E3-graded event from a validation or
 verification report is machine static evidence with a grade annotation
 (`build_cumulative.py` `event_class`), and ungraded confirmations from
 reports at/after 0.179.0 never become events at all — the emitter
-(python3 -m traust.cli ledger emit-validation) quarantines them into
+(validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core)) quarantines them into
 `needs_review` until graded (pre-0.179.0 reports are grandfathered).
 
 The consequences are deliberately uncomfortable in one direction: a
@@ -322,7 +322,7 @@ six stacked controls:
    machine-readable `soundness_flag`, and the emitter queues an
    `unsound_refutation` needs_review item instead
    (`harnessing/5-validate/validate-findings/SKILL.md`,
-   python3 -m traust.cli ledger emit-validation; legacy reports are
+   validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core); legacy reports are
    linted retroactively by python3 -m traust.ops.lint_refutation_soundness). A
    probe that never soundly tested the claim proves nothing either way.
 2. **Machine FPs pend by default (countersign rule).** A machine
@@ -378,7 +378,7 @@ visible, stay testable, and lose to evidence.
 ### 6a. The countersign workbench
 
 "Awaiting sign-off" is derived state, not a stored queue — so
-python3 -m traust.cli admin countersign provides the human inbox over it:
+the retired `admin countersign` (the review queue is traust-core's now) provides the human inbox over it:
 
 - **`queue`** walks a findings tree, derives every pending decision
   (awaiting-signoff findings + pending `needs_review` items), and
@@ -419,7 +419,7 @@ python3 -m traust.cli admin countersign provides the human inbox over it:
   second independent signer must concur); `severity=<level>` records an
   upgrade or downgrade — the audit report's severity is never
   rewritten, the cumulative report carries it as `effective_severity`
-  plus a `severity_overrides` table (python3 -m traust.cli admin countersign).
+  plus a `severity_overrides` table (the retired `admin countersign` (the review queue is traust-core's now)).
 
 None of the §6 safeguards are relaxed: the workbench removes the memory
 burden and the ceremony, not the verification, the rationale
@@ -430,13 +430,10 @@ requirement, or the override machinery.
 `/triage` Phase 6e runs the emitter and then rebuilds the cumulative
 report; both are deterministic and can be re-run by hand:
 
-```bash
-python3 -m traust.cli ledger emit-triage \
-    <repo>-triage.json --audit <repo>-security-audit.json \
-    --lint .triage-state/verdict-lint.json   # --layer, --weights, --tenancy-profile optional
-python3 -m traust.cli build cumulative \
-    <repo>-security-audit.json <repo>-findings-layer.json
-```
+Both commands retired with the traust-core hub: a triage records through
+`traust triage record <assessment> <triage.json> --repo <checkout>`, and
+traust-core derives each finding's status from its decisions (no cumulative
+file to rebuild).
 
 The emitter routes and gates only. It never flips validity itself; the
 merge engine and the countersign rule decide. Only findings with a
@@ -857,7 +854,7 @@ touchpoint — lives in the `## Integrations` section of
 |---|---|
 | Operating the ledger (ingest sources, tiers, interactive countersign) | `harnessing/4-triage/track-findings/SKILL.md` |
 | Querying the corpus via the SQLite projection (`findings.db`) | `harnessing/findings-db/SKILL.md` |
-| Countersign workbench (decision cards, apply/record) | python3 -m traust.cli admin countersign (§6a) |
+| Countersign workbench (decision cards, apply/record) | retired `admin countersign` (§6a); the review queue is traust-core's (`AttestationService`, `FindingReview`) |
 | Triage → ledger wiring (verdict → event mapping, emitter) | §6b; `src/traust/cli/emit_triage_ledger_events.py` |
 | λ weight table (versioned, owner-tunable) | `$TRAUST_CONFIG_HOME/hardening-risk-weights.json` (§7a) |
 | Whole-pipeline map (artifacts, producers, consumers) | [artifacts.md](artifacts.md) |
