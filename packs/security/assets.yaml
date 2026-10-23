@@ -1,0 +1,16 @@
+# The security pack's asset graph (contracts config/v1/pack.schema.json), read by traust-engine to
+# plan and admit, and by runners to execute from their pinned copy. Rows come from the
+# standing-jobs table in docs/continuous-operations.md.
+pack: security
+assets:
+  feeds_cache:
+    run: [python3, -m, traust.cli, feeds, fetch, --feed, all]
+    trigger: {every: 24h}
+    priority: 10
+    freshness: {fail: 48h}
+
+  repo_state:  # no `run` yet: its materializer (PortfolioService.record_forge_facts) is still to come
+    partitions: dynamic:repo
+    trigger: {every: 24h}
+    priority: 20
+    freshness: {fail: 72h}
