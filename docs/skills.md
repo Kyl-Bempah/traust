@@ -256,7 +256,7 @@ Review and sign off pending human decisions in the findings disposition ledger �
 
 ## track-findings
 
-Use when the user wants to record human triage feedback or machine validation results against the findings of a *-security-audit, *-cloud-config-audit, or *-container-audit report and produce a cumulative status report — ingesting merge-request comments, commits, Jira tickets, interactive human triage, live-validation reports, and remediation-verification reports into an append-only disposition layer, then generating a schema-conformant *-findings-current.{json,md} showing the current validity and resolution of every finding.
+Use when the user wants to record human triage feedback against the findings of an audit — merge-request or pull-request comments, commits, Jira tickets, or an interactive triage session — or asks for the current state of a repository's findings. Statements become decisions in traust-core (recorded when they need no interpretation, queued for a person otherwise); the skill reports each finding's validity, resolution, assurance, severity, SLA and review-surface coverage, and hands findings to code scanning as SARIF. Machine reports (triage, validation, verification) record through their own skills.
 
 - **Stage:** ④ Triage
 - **Tier:** `primary`

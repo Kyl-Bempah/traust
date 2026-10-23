@@ -52,7 +52,6 @@ The schemas below (from the installed `traust-contracts` package) are the comple
 | python3 -m traust.cli check citations | Citation verification gate for findings |
 | python3 -m traust.cli build symbol-index | Builds symbol index for triage acceleration |
 | python3 -m traust.cli admin query-index | Queries the symbol index |
-| harnessing/4-triage/track-findings/scripts/baseline_claims.py | Baseline claim extraction |
 | `traust triage record` | Records a validated triage as decisions on traust-core (replaced `ledger emit-triage`) |
 | python3 -m traust.cli check docs-consistency | Doc-drift detection for harness docs |
 | python3 -m traust.cli impact cluster-state-diff | P5 discovery sweep 1 — before/after security-state snapshots (RBAC, SCCs, webhooks, NetworkPolicies, Services/Routes) diffed into validation-discovery candidates for /triage |
