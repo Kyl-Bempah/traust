@@ -256,12 +256,13 @@ Review and sign off pending human decisions in the findings disposition ledger �
 
 ## track-findings
 
-Use when the user wants to record human triage feedback against audit findings, or asks for the current state of a repository's findings — ingesting merge-request comments, commits, Jira tickets and interactive triage as decisions on the findings in traust-core, then reporting each finding's validity, resolution, assurance, severity and SLA. Machine reports (triage, validation, verification) record through their own skills.
+Use when the user wants to record human triage feedback against the findings of an audit — merge-request or pull-request comments, commits, Jira tickets, or an interactive triage session — or asks for the current state of a repository's findings. Statements become decisions in traust-core (recorded when they need no interpretation, queued for a person otherwise); the skill reports each finding's validity, resolution, assurance, severity, SLA and review-surface coverage, and hands findings to code scanning as SARIF. Machine reports (triage, validation, verification) record through their own skills.
 
 - **Stage:** ④ Triage
 - **Tier:** `primary`
 - **Invoke:** `/track-findings`
 - **Skill:** [harnessing/4-triage/track-findings/SKILL.md](../harnessing/4-triage/track-findings/SKILL.md)
+- **Produces / consumes:** [Integrations](../harnessing/4-triage/track-findings/SKILL.md#integrations)
 
 ## triage
 

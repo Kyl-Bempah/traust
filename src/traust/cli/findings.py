@@ -1,15 +1,23 @@
-"""``traust findings find|status|history|baseline|decide``: track-findings' doors on traust-core.
+"""``traust findings …``: track-findings' doors on traust-core.
 
 find      the finding a report entry is (its label, e.g. OPERATOR-abcdef0-001), by fingerprint
 status    one finding now: disposition (evidence precedence), effective severity, SLA due
 history   every decision on a finding, in judgement order
 baseline  a repository's findings as they stood at a time
 decide    record your statement on a finding (needs `traust auth`)
+import    what people said in an MR / PR / commit / Jira ticket: recorded if it stands, else queued
+queue     statements waiting for a person, re-read from their source
+confirm   a queued statement, as your decision; reject: close it, recording nothing
+refuted   a repository's false positives (the refuted register)
+surfaces  review-surface coverage (the audit, with later scans merged)
+sarif     a repository's findings as SARIF for code scanning
+tickets   the Jira tickets on a repository's findings
 """
 
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,9 +25,12 @@ from typing import Any
 
 from traust_core.v1.context import Context
 from traust_core.v1.errors import NotFoundError, ValidationError
-from traust_core.v1.models.findings import RecordDecision
+from traust_core.v1.models.attestation import AttestationDecision
+from traust_core.v1.models.common import PageRequest
+from traust_core.v1.models.findings import FindingFilter, RecordDecision, ReviewFilter
 from traust_core.v1.models.integrity import FingerprintInput
 from traust_core.v1.models.inventory import Repository
+from traust_core.v1.models.remediation import ExternalRef
 from traust_core.v1.models.values import HttpsRepoUrl
 from traust_core.v1.models.vocabulary import (
     DispositionResolution,
@@ -28,9 +39,14 @@ from traust_core.v1.models.vocabulary import (
     SourceType,
     Validity,
 )
+from traust_core.v1.providers.comments import FORGE, JIRA
+from traust_core.v1.services.insight import SarifExport
 
 from traust.cli._doors import parser, run
 from traust.context import load_caller, load_core
+
+_JIRA_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+_BROWSE = re.compile(r"/browse/([A-Z][A-Z0-9]+-\d+)")
 
 # What a person states directly; machine reports record through their own skill's doors.
 STATEMENT_SOURCES = (
@@ -122,9 +138,7 @@ def baseline(argv: list[str] | None = None) -> int:
     return run(call)
 
 
-def decide(argv: list[str] | None = None) -> int:
-    ap = parser("findings", "decide", "Record your statement on a finding.")
-    ap.add_argument("finding_id", type=uuid.UUID)
+def _statement_args(ap: Any) -> None:
     ap.add_argument("--rationale", required=True, help="why, in your words (quoted verbatim)")
     ap.add_argument("--validity", choices=[v.value for v in Validity])
     ap.add_argument("--resolution", choices=[r.value for r in DispositionResolution])
@@ -135,26 +149,225 @@ def decide(argv: list[str] | None = None) -> int:
         "--source",
         default=SourceType.INTERACTIVE.value,
         choices=[s.value for s in STATEMENT_SOURCES],
-        help="where you said it (default: interactive)",
+        help="where it was said (default: interactive)",
     )
     ap.add_argument("--occurred-at", help="when it was said, ISO with a zone (default: now)")
+
+
+def _statement(args: Any, finding_id: uuid.UUID) -> RecordDecision:
+    if not (args.validity or args.resolution or args.severity):
+        raise ValidationError("say something: --validity, --resolution or --severity")
+    return RecordDecision(
+        finding_id=finding_id,
+        rationale=args.rationale,
+        validity=args.validity,
+        resolution=args.resolution,
+        severity=args.severity,
+        evidence_grade=args.evidence_grade,
+        reason=args.reason,
+        source_channel=SourceType(args.source),
+        occurred_at=_when(args.occurred_at),
+    )
+
+
+def _labels(core: Context, repo: Repository, reports: list[Path]) -> dict[str, uuid.UUID]:
+    """Each report's labels (`findings[].id`) to the findings they are, by fingerprint."""
+    assert repo.id is not None
+    intake = core.services().findings.intake
+    out: dict[str, uuid.UUID] = {}
+    for report in reports:
+        for entry in json.loads(report.read_text(encoding="utf-8")).get("findings") or []:
+            label = entry.get("id")
+            if isinstance(label, str) and entry.get("locations"):
+                found = intake.match(repo.id, FingerprintInput.from_report(entry, repo.url))
+                if found is not None:
+                    out[label] = found
+    return out
+
+
+def _reports_and_repo(ap: Any) -> None:
+    ap.add_argument("--repo-url", required=True, help="https URL of the audited repository")
+    ap.add_argument(
+        "--report",
+        type=Path,
+        action="append",
+        default=[],
+        help="a report whose labels the comments use (repeatable)",
+    )
+
+
+def decide(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "decide", "Record your statement on a finding.")
+    ap.add_argument("finding_id", type=uuid.UUID)
+    _statement_args(ap)
     args = ap.parse_args(argv)
 
     def call() -> Any:
-        if not (args.validity or args.resolution or args.severity):
-            raise ValidationError("say something: --validity, --resolution or --severity")
+        statement = _statement(args, args.finding_id)
         core = load_core(args.config_home)
-        statement = RecordDecision(
-            finding_id=args.finding_id,
-            rationale=args.rationale,
-            validity=args.validity,
-            resolution=args.resolution,
-            severity=args.severity,
-            evidence_grade=args.evidence_grade,
-            reason=args.reason,
-            source_channel=SourceType(args.source),
-            occurred_at=_when(args.occurred_at),
-        )
         return _json(core.services().findings.decisions.decide(statement, load_caller(core)))
+
+    return run(call)
+
+
+def import_(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "import", "Record what people said in an MR, PR, commit or ticket.")
+    ap.add_argument("ref", help="an MR / PR / commit URL, or a Jira key")
+    _reports_and_repo(ap)
+    args = ap.parse_args(argv)
+
+    def call() -> dict[str, Any]:
+        core = load_core(args.config_home)
+        repo = _repository(core, args.repo_url)
+        source = JIRA if _JIRA_KEY.match(args.ref) else FORGE
+        report = core.services().attestation.import_statements(
+            source,
+            ExternalRef(system=source, ref=args.ref),
+            _labels(core, repo, args.report),
+            load_caller(core),
+        )
+        return {
+            "recorded": [_json(d) for d in report.recorded],
+            "queued": [_json(i) for i in report.queued],
+            "unmatched": [
+                {"label": s.label, "author": s.author, "url": s.url} for s in report.unmatched
+            ],
+            "already_imported": report.already_imported,
+        }
+
+    return run(call)
+
+
+def queue(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "queue", "List statements waiting for a person, re-read from source.")
+    ap.add_argument("--repo-url", help="with --report: re-read each item's statements")
+    ap.add_argument("--report", type=Path, action="append", default=[])
+    ap.add_argument("--limit", type=int, default=100)
+    args = ap.parse_args(argv)
+
+    def call() -> list[dict[str, Any]]:
+        core = load_core(args.config_home)
+        attestation = core.services().attestation
+        names: dict[str, uuid.UUID] = {}
+        if args.repo_url:
+            names = _labels(core, _repository(core, args.repo_url), args.report)
+        out = []
+        for item in attestation.pending(ReviewFilter(), PageRequest(limit=args.limit)).items:
+            assert item.id is not None
+            out.append(
+                {
+                    **_json(item),
+                    "sources": [s.ref for s in attestation.sources(item.finding_id)],
+                    "said": [_json(s) for s in attestation.statements(item.id, names)]
+                    if names
+                    else [],
+                }
+            )
+        return out
+
+    return run(call)
+
+
+def confirm(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "confirm", "Confirm a queued statement as your own decision.")
+    ap.add_argument("item_id", type=uuid.UUID)
+    ap.add_argument("finding_id", type=uuid.UUID, help="the item's finding (from `queue`)")
+    _statement_args(ap)
+    args = ap.parse_args(argv)
+
+    def call() -> Any:
+        statement = _statement(args, args.finding_id)
+        core = load_core(args.config_home)
+        caller = load_caller(core)
+        attestation = core.services().attestation
+        answer = AttestationDecision.CONFIRM
+        return _json(attestation.attest(args.item_id, caller, answer, statement))
+
+    return run(call)
+
+
+def reject(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "reject", "Close a queued statement without recording anything.")
+    ap.add_argument("item_id", type=uuid.UUID)
+    args = ap.parse_args(argv)
+
+    def call() -> Any:
+        core = load_core(args.config_home)
+        attestation = core.services().attestation
+        caller = load_caller(core)
+        return _json(attestation.attest(args.item_id, caller, AttestationDecision.REJECT, None))
+
+    return run(call)
+
+
+def refuted(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "refuted", "List a repository's false positives (refuted register).")
+    ap.add_argument("--repo-url", required=True)
+    args = ap.parse_args(argv)
+
+    def call() -> list[Any]:
+        core = load_core(args.config_home)
+        repo = _repository(core, args.repo_url)
+        assert repo.id is not None
+        wanted = FindingFilter(repository_id=repo.id, validity=Validity.FALSE_POSITIVE)
+        out, page = [], PageRequest()
+        while True:
+            got = core.services().findings.list(wanted, page)
+            out += [_json(v) for v in got.items]
+            if got.next is None:
+                return out
+            page = PageRequest(cursor=got.next)
+
+    return run(call)
+
+
+def surfaces(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "surfaces", "Review-surface coverage: the audit plus later scans.")
+    ap.add_argument("--repo-url", required=True)
+    ap.add_argument("--as-of", help="ISO time with a zone (default: now)")
+    args = ap.parse_args(argv)
+
+    def call() -> dict[str, Any]:
+        core = load_core(args.config_home)
+        repo = _repository(core, args.repo_url)
+        assert repo.id is not None
+        merged = core.services().findings.review_surfaces(repo.id, _when(args.as_of))
+        return {surface: _json(c) for surface, c in merged.items()}
+
+    return run(call)
+
+
+def sarif(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "sarif", "Export a repository's findings as SARIF (code scanning).")
+    ap.add_argument("--repo-url", required=True)
+    ap.add_argument("--as-of", help="ISO time with a zone (default: now)")
+    ap.add_argument("-o", "--out", type=Path, help="write here instead of stdout")
+    args = ap.parse_args(argv)
+
+    def call() -> Any:
+        core = load_core(args.config_home)
+        repo = _repository(core, args.repo_url)
+        assert repo.id is not None
+        views = core.services().findings.baseline(repo.id, _when(args.as_of) or datetime.now(UTC))
+        doc = SarifExport().document(views, repo.url)
+        if args.out is None:
+            return doc
+        args.out.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+        return None
+
+    return run(call)
+
+
+def tickets(argv: list[str] | None = None) -> int:
+    ap = parser("findings", "tickets", "The Jira tickets filed against a repository's findings.")
+    ap.add_argument("--repo-url", required=True)
+    args = ap.parse_args(argv)
+
+    def call() -> list[str]:
+        core = load_core(args.config_home)
+        repo = _repository(core, args.repo_url)
+        assert repo.id is not None
+        found = (_BROWSE.search(t.ref) for t in core.services().attestation.tickets(repo.id))
+        return sorted({m[1] for m in found if m})
 
     return run(call)

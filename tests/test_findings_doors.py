@@ -5,11 +5,15 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
+from traust_core.v1.models.attestation import Comment, ExternalHandle
+from traust_core.v1.models.vocabulary import SourceType
+from traust_core.v1.providers.base import Acquisition, Result
 
 from tests.test_triage_doors import SARIF, SHA
 from traust.cli import auth, findings, triage
@@ -184,3 +188,153 @@ def test_provider_flows_need_identity_login(home: Path, door: Any, capsys: Any) 
 
 def test_an_unregistered_repository_is_an_error(home: Path) -> None:
     assert run(findings.baseline, home, "--repo-url", "https://github.com/example/none")[0] == 2
+
+
+class Said:
+    """A comment source standing in for gh / glab / jira: returns what the test put on it."""
+
+    def __init__(self, name: str, comments: list[Any]) -> None:
+        self.name, self.said = name, comments
+
+    def check(self) -> Any:
+        return None
+
+    def comments(self, ref: Any) -> Any:
+        from datetime import UTC, datetime
+
+        return Result(
+            list(self.said), Acquisition(provider=self.name, acquired_at=datetime.now(UTC))
+        )
+
+
+MR = "https://github.com/example/canary/pull/7"
+
+
+def comment(body: str, n: int, **kw: Any) -> Any:
+    values: dict[str, Any] = {
+        "source": SourceType.MR_COMMENT,
+        "author": ExternalHandle("maint"),
+        "body": body,
+        "at": datetime(2026, 10, 22, 9, n, tzinfo=UTC),
+        "url": f"{MR}#issuecomment-{n}",
+        "maintainer": True,
+    }
+    return Comment(**{**values, **kw})
+
+
+@pytest.fixture
+def forge(monkeypatch: pytest.MonkeyPatch) -> dict[str, Said]:
+    sources = {"forge": Said("forge", []), "jira": Said("jira", [])}
+    monkeypatch.setattr("traust_core.v1.context.context.comment_sources", lambda *a, **k: sources)
+    return sources
+
+
+def audit_report(tmp_path: Path) -> Path:
+    report = tmp_path / "canary-security-audit.json"
+    entry = {"id": "CANARY-aaaaaaa-001", "locations": [{"path": "entry.c", "line_start": 25}]}
+    report.write_text(json.dumps({"findings": [entry]}))
+    return report
+
+
+def test_import_records_what_stands_and_queues_the_rest(
+    home: Path, tmp_path: Path, forge: dict[str, Said]
+) -> None:
+    finding_id = scanned(home, tmp_path)
+    report = audit_report(tmp_path)
+    run(auth.local, home, "--identity", "alice@example.com")
+    forge["forge"].said = [
+        comment("/traust false-positive CANARY-aaaaaaa-001 the length is checked at entry.c:20", 1),
+    ]
+    argv = (MR, "--repo-url", REPO, "--report", str(report))
+    rc, got = run(findings.import_, home, *argv)
+    assert rc == 0, got
+    [made] = got["recorded"]
+    assert (made["finding_id"], made["validity"], made["actor"]) == (
+        finding_id,
+        "false_positive",
+        "human:alice@example.com",
+    )
+    assert run(findings.import_, home, *argv)[1]["already_imported"] == 1
+    rc, fps = run(findings.refuted, home, "--repo-url", REPO)
+    assert [v["finding"]["id"] for v in fps] == [finding_id]
+
+
+def test_a_queued_statement_is_reviewed_then_confirmed(
+    home: Path, tmp_path: Path, forge: dict[str, Said]
+) -> None:
+    finding_id = scanned(home, tmp_path)
+    report = audit_report(tmp_path)
+    run(auth.local, home, "--identity", "alice@example.com")
+    forge["forge"].said = [comment("CANARY-aaaaaaa-001 looks like a false positive to me", 2)]
+    rc, got = run(findings.import_, home, MR, "--repo-url", REPO, "--report", str(report))
+    [item] = got["queued"]
+    assert item["reason"] == "ambiguous_statement"
+
+    rc, waiting = run(findings.queue, home, "--repo-url", REPO, "--report", str(report))
+    [shown] = waiting
+    assert shown["sources"] == [f"{MR}#issuecomment-2"]
+    assert [s["body"] for s in shown["said"]] == [
+        "CANARY-aaaaaaa-001 looks like a false positive to me"
+    ]
+
+    why = f'maint on {MR}#issuecomment-2, confirmed with them: "length checked at entry.c:20"'
+    argv = (item["id"], finding_id, "--validity", "false_positive", "--rationale", why)
+    argv += ("--source", "mr_comment")
+    rc, closed = run(findings.confirm, home, *argv)
+    assert (rc, closed["status"]) == (0, "confirmed"), closed
+    assert run(findings.queue, home)[1] == []
+    assert run(findings.status, home, finding_id)[1]["disposition"]["validity"] == "false_positive"
+
+
+def test_a_queued_statement_can_be_rejected(
+    home: Path, tmp_path: Path, forge: dict[str, Said]
+) -> None:
+    scanned(home, tmp_path)
+    run(auth.local, home, "--identity", "alice@example.com")
+    forge["forge"].said = [comment("CANARY-aaaaaaa-001?", 3, maintainer=False)]
+    _, got = run(
+        findings.import_, home, MR, "--repo-url", REPO, "--report", str(audit_report(tmp_path))
+    )
+    [item] = got["queued"]
+    rc, closed = run(findings.reject, home, item["id"])
+    assert (rc, closed["status"]) == (0, "rejected")
+
+
+def test_tickets_name_the_jira_keys_on_a_repositorys_findings(
+    home: Path, tmp_path: Path, forge: dict[str, Said]
+) -> None:
+    scanned(home, tmp_path)
+    run(auth.local, home, "--identity", "alice@example.com")
+    forge["jira"].said = [
+        comment(
+            "Filed for CANARY-aaaaaaa-001",
+            4,
+            source=SourceType.JIRA,
+            author="",
+            status="In Progress",
+            url="https://example.atlassian.net/browse/SEC-12",
+        )
+    ]
+    _, got = run(
+        findings.import_,
+        home,
+        "SEC-12",
+        "--repo-url",
+        REPO,
+        "--report",
+        str(audit_report(tmp_path)),
+    )
+    assert [i["reason"] for i in got["queued"]] == ["unverified_identity"]
+    assert run(findings.tickets, home, "--repo-url", REPO) == (0, ["SEC-12"])
+
+
+def test_sarif_and_surfaces(home: Path, tmp_path: Path) -> None:
+    finding_id = scanned(home, tmp_path)
+    rc, doc = run(findings.sarif, home, "--repo-url", REPO)
+    assert rc == 0 and doc["version"] == "2.1.0"
+    [result] = doc["runs"][0]["results"]
+    assert result["partialFingerprints"]["traustFindingId/v1"] == finding_id
+    out = tmp_path / "canary.sarif"
+    assert run(findings.sarif, home, "--repo-url", REPO, "-o", str(out))[0] == 0
+    assert json.loads(out.read_text())["runs"][0]["results"][0]["level"] == result["level"]
+    assert run(findings.surfaces, home, "--repo-url", REPO) == (0, {})

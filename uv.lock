@@ -7,7 +7,7 @@ resolution-markers = [
 ]
 
 [manifest]
-overrides = [{ name = "traust-core", git = "https://github.com/traust-security/traust-core.git?rev=d918b333eb47e9ee68681609d1bb830d0072bb6e" }]
+overrides = [{ name = "traust-core", git = "https://github.com/traust-security/traust-core.git?rev=391596364c94b139d738ed9731090f991a7991d7" }]
 
 [[package]]
 name = "annotated-types"
@@ -1447,7 +1447,7 @@ requires-dist = [
     { name = "pyyaml" },
     { name = "referencing" },
     { name = "sigstore", marker = "extra == 'signing'", specifier = ">=4.0,<5.0" },
-    { name = "traust-core", git = "https://github.com/traust-security/traust-core.git?rev=d918b333eb47e9ee68681609d1bb830d0072bb6e" },
+    { name = "traust-core", git = "https://github.com/traust-security/traust-core.git?rev=391596364c94b139d738ed9731090f991a7991d7" },
     { name = "traust-engine", git = "https://github.com/traust-security/traust-engine.git?rev=263e45b8e22a94ac5e262ca9d015c0bd86fdb3f8" },
     { name = "tree-sitter", marker = "extra == 'graph'" },
     { name = "tree-sitter-go", marker = "extra == 'graph'" },
@@ -1466,7 +1466,7 @@ dev = [
 [[package]]
 name = "traust-contracts"
 version = "0.0.0"
-source = { git = "https://github.com/traust-security/traust-contracts.git?rev=47fa044d10d2c40106f9f202a8d9b3e9492b6b52#47fa044d10d2c40106f9f202a8d9b3e9492b6b52" }
+source = { git = "https://github.com/traust-security/traust-contracts.git?rev=0d4b5b738641000afa211a581c21d85140c16e32#0d4b5b738641000afa211a581c21d85140c16e32" }
 dependencies = [
     { name = "jsonschema", extra = ["format-nongpl"] },
     { name = "pydantic" },
@@ -1476,7 +1476,7 @@ dependencies = [
 [[package]]
 name = "traust-core"
 version = "0.1.0"
-source = { git = "https://github.com/traust-security/traust-core.git?rev=d918b333eb47e9ee68681609d1bb830d0072bb6e#d918b333eb47e9ee68681609d1bb830d0072bb6e" }
+source = { git = "https://github.com/traust-security/traust-core.git?rev=391596364c94b139d738ed9731090f991a7991d7#391596364c94b139d738ed9731090f991a7991d7" }
 dependencies = [
     { name = "jsonschema", extra = ["format-nongpl"] },
     { name = "pydantic" },
@@ -1502,7 +1502,7 @@ dependencies = [
 [[package]]
 name = "traust-ledger"
 version = "0.0.0"
-source = { git = "https://github.com/traust-security/traust-ledger.git?rev=7f34ff61ddd6f1b868c85cae6c5a466d3d6c6bb4#7f34ff61ddd6f1b868c85cae6c5a466d3d6c6bb4" }
+source = { git = "https://github.com/traust-security/traust-ledger.git?rev=461f00d1a935f50c0f504e0694b258873d12ccfe#461f00d1a935f50c0f504e0694b258873d12ccfe" }
 
 [[package]]
 name = "tree-sitter"
