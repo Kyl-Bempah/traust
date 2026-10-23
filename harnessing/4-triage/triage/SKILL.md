@@ -33,11 +33,9 @@ allowed-tools:
   - Bash(python3 *traust* -m traust.cli.checkpoint:*)
   - Bash(python3 *traust* -m traust.cli.check_citations:*)
   - Bash(python3 *traust* -m traust.cli.query_index:*)
-  - Bash(python3 *traust/harnessing/4-triage/triage/scripts/lint_verdict_citations.py:*)
+  - Bash(python3 *traust* -m traust.cli triage check:*)
   - Bash(python3 *traust* -m traust.cli reporting validate:*)
   - Bash(python3 *traust/harnessing/4-triage/triage/scripts/render_triage.py:*)
-  - Bash(python3 *traust* -m traust.cli.emit_triage_ledger_events:*)
-  - Bash(python3 *traust* -m traust.cli corpus precedent:*)
 ---
 
 # triage
@@ -88,7 +86,7 @@ permitted only for `git`, `wc`, `ls`, `jq` (`find` is NOT permitted —
 `python3 -m traust.cli admin checkpoint` (checkpoint I/O), and these
 harness scripts: `check_citations.py` (pre-vote gate, 2c),
 `query_index.py` (symbol index, 2d + verifiers),
-`lint_verdict_citations.py` (post-vote evidence lint, 3d),
+`traust triage check` (post-vote evidence lint on traust-core, 6b2),
 `validate_report.py` (output-contract gate, 6c), `render_triage.py`
 (deterministic Markdown, 6d), and `build_fp_precedent_cache.py match`
 (shared-component precedent annotation, 2g). The deterministic tools
@@ -644,6 +642,8 @@ in the Phase 2 checkpoint delta.
 
 ### 2g. Shared-component FP-precedent annotation (deterministic, no subagent, optional)
 
+**Waiting on traust-core:** the precedent cache and its command retired with the traust-core hub; precedents come from `FindingPrecedents` in the next part of this skill's port. Until then skip this step and record `precedent_cache: none`.
+
 Shared/vendored components get the same false positive re-litigated in
 every repo that ships them (the measured 949-event re-refutation
 treadmill). The portfolio precedent cache — `fp-precedent-cache.json`
@@ -1131,32 +1131,9 @@ flows through the normal countersign-gated ledger path in 6e.
 Build `confirmed[]` = candidates with `verdict == true_positive`, and
 `hardening[]` = candidates with `verdict == hardening`.
 
-### 3d. Lint verifier citations (deterministic, no subagent)
+### 3d. Verifier citations
 
-Verifier evidence is itself checkable. Write the tallied findings to
-`./.triage-state/_chunk.tmp` (as `{"findings": [...]}`), then Bash:
-
-```
-python3 <harness>/harnessing/4-triage/triage/scripts/lint_verdict_citations.py ./.triage-state/_chunk.tmp \
-    --repo {REPO_PATH} --json-out ./.triage-state/verdict-lint.json
-```
-
-The lint confirms every file:line cited in `first_links` and `rationale`
-resolves under the repo and is in range. It routes; it never concludes:
-
-- `re_vote_recommended` (a `false_positive` or `hardening` verdict cites
-  broken evidence): a dismissal resting on evidence that does not exist is
-  the most dangerous triage failure mode — a hallucinated refutation.
-  Spawn ONE fresh verifier vote for that finding and re-tally (the broken
-  vote's citations are noted in the re-vote prompt as "previously cited
-  evidence that does not exist"). One re-vote per finding.
-- `review_recommended` (a `true_positive` cites broken evidence): keep the
-  verdict, set `verify_verdict: needs_manual_test`, and note the broken
-  citation in rationale — the finding stays on the action list but a human
-  re-checks the evidence.
-
-If the script errors, skip this step — the lint is an accelerator, never a
-prerequisite.
+Linted on the written triage in 6b2 (traust-core's door needs the whole document).
 
 **Checkpoint:** Write tool → `./.triage-state/_chunk.tmp`:
 
@@ -1427,6 +1404,34 @@ Every input finding appears exactly once (duplicates reference their
 canonical via `duplicate_of`). Do not silently drop anything. Do not print
 this JSON to the terminal; write to file only.
 
+### 6b2. Lint verifier citations (deterministic, no subagent)
+
+Verifier evidence is itself checkable. Bash:
+
+```
+python3 -m traust.cli triage check <findings-dir>/<repo>-triage.json --repo {REPO_PATH}
+```
+
+traust-core confirms every file:line cited in `first_links` and
+`rationale` resolves under the repo and is in range. It routes; it never
+concludes:
+
+- `re_vote` (a `false_positive` or `hardening` verdict cites broken
+  evidence): a dismissal resting on evidence that does not exist is the
+  most dangerous triage failure mode — a hallucinated refutation. Spawn
+  ONE fresh verifier vote for that finding (note the broken citations in
+  the prompt as "previously cited evidence that does not exist") and
+  re-tally it. If the verdict changes, update that finding (a new
+  `true_positive` gets its Phase 4a severity) and the summary, rewrite
+  the JSON and run the check once more. One re-vote per finding.
+- `review` (any other verdict cites broken evidence): keep the verdict,
+  set `verify_verdict: needs_manual_test`, and note the broken citation in
+  the rationale — the finding stays on the action list but a human
+  re-checks the evidence.
+
+If the check errors, say so in the terminal summary and continue: the lint
+is an accelerator, never a prerequisite.
+
 ### 6c. Validate <repo>-triage.json
 
 Bash:
@@ -1462,6 +1467,8 @@ and re-run 6c rather than writing the Markdown by hand — divergent
 hand-built reports are exactly what the renderer exists to prevent.
 
 ### 6e. Emit disposition-ledger events (harness-audit input only)
+
+**Waiting on traust-core:** `traust ledger emit-triage` retired with the traust-core hub; recording becomes `FindingDecisions.record` (decisions plus review items, appended to the ledger), being built now. Until it lands, skip this step and say in the terminal summary that the verdicts are recorded in `<repo>-triage.json` only.
 
 When the input was a harness `*-security-audit.json` (canonical orig_ids)
 and the audit report is available, feed the verdicts into the
