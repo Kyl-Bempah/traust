@@ -1057,12 +1057,9 @@ Present a summary table to the user:
 After delivering, emit resolution events into the findings ledger so
 the cumulative status reflects verification verdicts:
 
-```bash
-python3 -m traust.cli ledger emit-verification \
-    <path-to>/<repo>-remediation-verification.json \
-    --results-root analysis-results \
-    --build-cumulative
-```
+> The emitter (`ledger emit-verification`) retired with the traust-core hub;
+> this skill's record door replaces it with its port to traust-core
+> (progress-tracker skill port 31). Until then this step doesn't run.
 
 This maps each verified finding's verdict to a `disposition.resolution`
 event (`resolved`, `partially_resolved`, `fix_in_progress`, `open`,
@@ -1237,11 +1234,8 @@ For each worklist entry, in order:
    Write the verification report beside the audit report in the
    findings tree.
 2. Emit resolution events into the ledger:
-   ```bash
-   python3 -m traust.cli ledger emit-verification \
-       <repo>-remediation-verification.json \
-       --results-root analysis-results --build-cumulative
-   ```
+   (Retired with the traust-core hub: `ledger emit-verification`. This
+   skill's record door replaces it with its port to traust-core.)
    Verification reports are class-1 evidence, the only sanctioned path
    to `resolution: resolved`. Phase 7a2 regression routing
    (`route_regressions`) is idempotent and separate — the emitter

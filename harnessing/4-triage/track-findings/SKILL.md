@@ -21,7 +21,6 @@ allowed-tools:
   - Bash(rg:*)
   - Bash(grep:*)
   - Bash(head:*)
-  - Bash(python3 -m traust.cli build cumulative:*)
   - Bash(python3 *-m traust.cli.countersign:*)
   - Bash(python3 *-m traust.cli corpus finding-identity:*)
   - Bash(python3 *-m traust.cli reporting validate:*)
@@ -175,10 +174,10 @@ in the new per-finding `disposition` block.
 
 | Source | Feeds | Mapping |
 |---|---|---|
-| `*-validation.json` verdicts (via python3 -m traust.cli ledger emit-validation) | validity | `confirmed` → confirmed (class-1 execution-verified — outranks every static determination); `refuted` → machine false_positive event (see countersign rule) + `*-refuted-register.json` merge-append; `inconclusive`/`blocked_by_scope`/`not_attempted` → no event. One validation report fans out across every repo ledger its `source_reports` cover; baselines resolve by direct path, content sha256, or claim-hash match (claim-identical alias trees all receive the event), and a direct-path baseline whose sha changed since validation queues a `stale_baseline` review item. `--manifest` batch mode replays a whole validation campaign idempotently. |
-| `*-triage.json` verdicts (via python3 -m traust.cli ledger emit-triage) | validity | `true_positive` → confirmed (skipped when needs_manual_test); `hardening` → hardening with category-aware λ recorded at emission; `false_positive` → machine FP event — auto-accept tier (`auto_accept_tier: true`: unanimous + lint-clean + confidence ≥ 8 + low/informational-claimed) sets validity directly with a 10% audit-valve sample queued, everything else countersign-gated; `undetermined` → needs_review item (`undetermined_finding`); `duplicate` → nothing. Every FP also lands in `*-refuted-register.json` (fuzzing/live-validation targeting input). Auto-discover `*-triage.json` next to the audit report. |
+| `*-validation.json` verdicts (via validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core)) | validity | `confirmed` → confirmed (class-1 execution-verified — outranks every static determination); `refuted` → machine false_positive event (see countersign rule) + `*-refuted-register.json` merge-append; `inconclusive`/`blocked_by_scope`/`not_attempted` → no event. One validation report fans out across every repo ledger its `source_reports` cover; baselines resolve by direct path, content sha256, or claim-hash match (claim-identical alias trees all receive the event), and a direct-path baseline whose sha changed since validation queues a `stale_baseline` review item. `--manifest` batch mode replays a whole validation campaign idempotently. |
+| `*-triage.json` verdicts (via `traust triage record`) | validity | `true_positive` → confirmed (skipped when needs_manual_test); `hardening` → hardening with category-aware λ recorded at emission; `false_positive` → machine FP event — auto-accept tier (`auto_accept_tier: true`: unanimous + lint-clean + confidence ≥ 8 + low/informational-claimed) sets validity directly with a 10% audit-valve sample queued, everything else countersign-gated; `undetermined` → needs_review item (`undetermined_finding`); `duplicate` → nothing. Every FP also lands in `*-refuted-register.json` (fuzzing/live-validation targeting input). Auto-discover `*-triage.json` next to the audit report. |
 | validation runs' `target-attestation.json` (P2) | both | read by the ledger emitter beside each validation report: `attested: false` (or a missing artifact on post-0.176.0 reports) voids every verdict in that run — all findings route to needs_review as `environment_invalid`/`attestation_missing`, never to FP/confirmed events; countersign cards render the attestation status |
-| `*-remediation-verification.json` verdicts (via python3 -m traust.cli ledger emit-verification) | both | `resolved` → resolved; `partially_resolved` → partially_resolved (override: `fix_in_progress` when `cross_repo.propagation == pending`); `unresolved` → open; `new_approach` → resolved; `regression` → regression_introduced; `false_positive` → machine false_positive (countersign-gated); `risk_accepted` → risk_accepted. Class-1 evidence, tier-0 resolution authority. |
+| `*-remediation-verification.json` verdicts (via verify-remediation's record door (retired `ledger emit-verification`; being ported to traust-core)) | both | `resolved` → resolved; `partially_resolved` → partially_resolved (override: `fix_in_progress` when `cross_repo.propagation == pending`); `unresolved` → open; `new_approach` → resolved; `regression` → regression_introduced; `false_positive` → machine false_positive (countersign-gated); `risk_accepted` → risk_accepted. Class-1 evidence, tier-0 resolution authority. |
 | `*-remediation-verification.json` `regressions[]` (via python3 -m traust.cli route regressions) | new findings | Phase-5 regressions become **first-class ledger findings directly — no `/triage` precondition** (user directive 2026-07-27; parity with the scanning skills). The router carries each regression on its ledger event (never the baseline — gate A15) audit as a campaign-ID finding (`{REPO_SLUG}-{PATCHED_SHA7}-{NNN}`, numbering continuing at the patched sha), `validation_status: not_verified`, `origin: verify-remediation`, script-computed fingerprint, REG id + report path in `source_findings` (and `routed_id` back on the regression entry); pins the claim hash (add-only) and appends a machine birth event (`resolution: open`, verification report as `evidence_ref` — validity is never set at birth). Idempotent; triage/validation adjudicate downstream like any claimed finding. |
 | `*-remediation-verification.json` `cross_repo` blocks | resolution | overrides the verdict row above when present: `partially_resolved` + `propagation: pending` → **fix_in_progress** (the upstream fix exists but the original repo has not consumed it — `evidence_refs` must carry the fix repo commit and the verification report; re-ingest after the next propagation check and promote to resolved on `consumed`); `resolved` + `consumed` → resolved; `propagation: not_applicable` → follow the verdict row (fix legitimately lives in the other repo); `module_absent` → follow the verdict, citing the verifier's removal judgment |
 | Jira | both | Done/Fixed → resolved; Won't Do with risk language → risk_accepted; Not a Bug → false_positive (attributed to the **resolving user** from the ticket changelog, never the bare status); In Progress → fix_in_progress. Ambiguous resolutions are queued, never guessed. |
@@ -242,7 +241,7 @@ state. The skill only auto-records what needs zero interpretation.
    ("SG_CORE-abcdef0-001 is a false positive: the value is validated in
    the CRD webhook before this path").
 2. **Verified identity**: the author's forge username maps to an employee
-   by the ledger identity layer: `python3 -m traust.cli admin countersign` requires a
+   by the ledger identity layer: `RETIRED:admin countersign` requires a
    cryptographically verified human OIDC token and cross-checks the holder
    against the deployment's employee directory (`ledger.yaml` `identity.directory_command`),
    refusing to record otherwise.
@@ -352,7 +351,7 @@ For a **remediation-verification report**, use the dedicated emitter
 and (separately) the regression router:
 
 ```bash
-python3 -m traust.cli ledger emit-verification \
+RETIRED:ledger emit-verification \
     <path>/<repo>-remediation-verification.json \
     --results-root analysis-results --build-cumulative
 
@@ -370,10 +369,10 @@ findings back at replay.
 Mechanics: [docs/findings-routing.md](../../../docs/findings-routing.md).
 
 **Interactive** — use the countersign workbench
-(python3 -m traust.cli admin countersign); never hand-assemble interactive events.
+(RETIRED:admin countersign); never hand-assemble interactive events.
 
 1. **Build the inbox:**
-   `python3 -m traust.cli admin countersign queue --root <findings-tree>`
+   `RETIRED:admin countersign queue --root <findings-tree>`
    (or `--repo-dir <one repo>`). This derives every
    `refuted_awaiting_signoff` finding and pending `needs_review` item and
    renders one self-contained DECISION CARD each — the audit claim, the
@@ -477,13 +476,13 @@ Consumed artifacts (producer named per artifact):
   `*-cloud-config-audit.json` (`/cloud-config-audit`),
   `*-container-audit.json` (`/secure-container-audit`).
 - `*-triage.json` — produced by `/triage`; verdicts enter via
-  python3 -m traust.cli ledger emit-triage.
+  `traust triage record`.
 - `*-validation.json` (+ `target-attestation.json`) — produced by
   `/validate-findings` / `/validate-operator-live` /
   `/validate-browser-finding`; verdicts enter via
-  python3 -m traust.cli ledger emit-validation.
+  validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core).
 - `*-remediation-verification.json` — produced by `/verify-remediation`;
-  verdicts emitted via python3 -m traust.cli ledger emit-verification
+  verdicts emitted via verify-remediation's record door (retired `ledger emit-verification`; being ported to traust-core)
   as resolution events (class-1 evidence, tier-0 resolution authority), and its
   `regressions[]` are routed into the **ledger** by
   python3 -m traust.cli route regressions as findings-carrying

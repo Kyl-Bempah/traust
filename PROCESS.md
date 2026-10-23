@@ -119,7 +119,7 @@ Adversarially verify every audit finding: N-vote verification with
 cited evidence, duplicate collapse, derived-exploitability re-ranking,
 and owner tagging. Verdicts land as `<repo>-triage.{json,md}` next to
 the audit report and flow into the disposition ledger automatically
-(Phase 6e → python3 -m traust.cli ledger emit-triage): true positives
+(Phase 6e → `traust triage record`): true positives
 become machine-`confirmed` events, false positives enter the tiered
 countersign flow, hardening findings take the `hardening` validity.
 The full contract: [docs/disposition-ledger.md](docs/disposition-ledger.md) §6b.
@@ -145,7 +145,7 @@ the internal extension's deploy-operator product map). Every verdict passes the
 fail-closed gate stack in
 [docs/validation-process.md](docs/validation-process.md); results emit
 `<slug>-validation.{json,md}` + `validation-audit.jsonl` and enter the
-ledger via python3 -m traust.cli ledger emit-validation (execution-graded
+ledger via validate-findings' record door (retired `ledger emit-validation`; being ported to traust-core) (execution-graded
 evidence — E0/E1 carries class-1 override power).
 
 ---

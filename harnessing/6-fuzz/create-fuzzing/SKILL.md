@@ -39,7 +39,7 @@ notes.
    fuzzing, or the report's remediation-roadmap "add fuzz harness" items).
    **Also check the refuted register** —
    `<repo>-refuted-register.json` alongside the audit report (emitted by
-   python3 -m traust.cli ledger emit-triage) lists findings dismissed as
+   `traust triage record`) lists findings dismissed as
    false positives; entries in fuzzable classes (parsers, decoders,
    memory safety, injection) are PRIORITY targets, because a reproducing
    crash overrides the FP assertion via evidence-class precedence

@@ -16,25 +16,24 @@ python3 -m traust.cli check skill-alignment      # equivalent
 
 ## Command groups
 
-17 groups (plus the deprecated `tools` group below).
+16 groups (plus the deprecated `tools` group below).
 
 | Group | Description | Operations |
 |---|---|---|
 | `adapters` | Scanner adapters (deterministic pre-scans) | `checkov`, `crypto-audit`, `crypto-probe`, `gitleaks`, `govulncheck`, `joern`, `opengrep`, `osv`, `yara` |
-| `admin` | Operator tooling | `attest-target`, `checkpoint`, `countersign`, `query-index`, `scan-internal-refs`, `toolchain` |
-| `build` | Deterministic builders | `cumulative`, `rescan-worklist`, `skills-reference`, `symbol-index` |
-| `check` | Deterministic gates | `citations`, `content-licenses`, `docs-consistency`, `estate-data`, `drift`, `fix-propagation`, `location-paths`, `reference-integrity`, `report-digests`, `skill-alignment`, `skill-security` |
+| `admin` | Operator tooling | `attest-target`, `checkpoint`, `query-index`, `scan-internal-refs`, `toolchain` |
+| `build` | Deterministic builders | `rescan-worklist`, `skills-reference`, `symbol-index` |
+| `check` | Deterministic gates | `citations`, `content-licenses`, `docs-consistency`, `estate-data`, `drift`, `fix-propagation`, `location-paths`, `reference-integrity`, `skill-alignment`, `skill-security` |
 | `compliance` | Compliance reporting | `dashboard`, `scope` |
-| `corpus` | Corpus management | `finding-identity`, `findings-db`, `precedent`, `resolve`, `summary` |
 | `dashboard` | Dashboard rebuilds | `refresh` |
-| `feeds` | Feed management | `fetch`, `reconcile-cve-provenance` |
+| `feeds` | Feed management | `fetch` |
 | `impact` | Impact analysis | `analyze`, `calibrate-rule-pack`, `cluster-state-diff`, `resolve-advisory-symbols`, `sweep` |
-| `ledger` | Ledger emission | `doc-variance`, `emit-triage`, `emit-validation`, `emit-verification`, `pull` |
+| `ledger` | Doc-variance register | `doc-variance` |
 | `metrics` | Metrics & spend | `attribute-spend`, `collect-spend`, `history`, `sla`, `spend` |
 | `portfolio` | Portfolio graph | `artifacts`, `build`, `deps-multi`, `freshness`, `interfaces`, `parsers`, `query`, `stats`, `symbols` |
 | `registry` | Model/product registry | `models`, `products` |
 | `reporting` | Report validation & rendering | `lint`, `rate-threats`, `render`, `sarif`, `validate` |
-| `route` | Finding routing | `impact-findings`, `regressions` |
+| `triage` | The triage skill's doors on traust-core | `check`, `intake`, `prepare`, `record`, `render` |
 | `sweep` | Class-generalization sweep | `benchmark`, `collect`, `draft`, `emit`, `mine`, `rule-lane`, `sweep` |
 | `util` | Utility commands | `elf`, `redact`, `safe-exec` |
 
