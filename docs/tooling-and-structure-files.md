@@ -47,7 +47,6 @@ The schemas below (from the installed `traust-contracts` package) are the comple
 | python3 -m traust.cli reporting lint | Deterministic threat-model gate — sections/columns/enums, coverage invariant, ID stability, provenance, evidence hygiene |
 | python3 -m traust.cli reporting render | Renders validated JSON reports to Markdown |
 | python3 -m traust.cli reporting sarif | Exports any report (incl. disposition-aware findings-current and cloud-config audits) to SARIF 2.1.0 for any SARIF consumer — a derived projection, dispositions become suppressions; `--results-root` batch sweep |
-| harnessing/4-triage/triage/scripts/render_triage.py | Renders triage reports |
 | python3 -m traust.cli check citations | Citation verification gate for findings |
 | python3 -m traust.cli build symbol-index | Builds symbol index for triage acceleration |
 | python3 -m traust.cli admin query-index | Queries the symbol index |
