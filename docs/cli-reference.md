@@ -16,17 +16,19 @@ python3 -m traust.cli check skill-alignment      # equivalent
 
 ## Command groups
 
-16 groups (plus the deprecated `tools` group below).
+18 groups (plus the deprecated `tools` group below).
 
 | Group | Description | Operations |
 |---|---|---|
 | `adapters` | Scanner adapters (deterministic pre-scans) | `checkov`, `crypto-audit`, `crypto-probe`, `gitleaks`, `govulncheck`, `joern`, `opengrep`, `osv`, `yara` |
 | `admin` | Operator tooling | `attest-target`, `checkpoint`, `query-index`, `scan-internal-refs`, `toolchain` |
+| `auth` | Who you act as, over traust-core's identity provider | `local`, `login`, `logout`, `refresh`, `service-account`, `status`, `token` |
 | `build` | Deterministic builders | `rescan-worklist`, `skills-reference`, `symbol-index` |
 | `check` | Deterministic gates | `citations`, `content-licenses`, `docs-consistency`, `estate-data`, `drift`, `fix-propagation`, `location-paths`, `reference-integrity`, `skill-alignment`, `skill-security` |
 | `compliance` | Compliance reporting | `dashboard`, `scope` |
 | `dashboard` | Dashboard rebuilds | `refresh` |
 | `feeds` | Feed management | `fetch` |
+| `findings` | track-findings' doors on traust-core | `baseline`, `confirm`, `decide`, `find`, `history`, `import`, `queue`, `refuted`, `reject`, `sarif`, `status`, `surfaces`, `tickets` |
 | `impact` | Impact analysis | `analyze`, `calibrate-rule-pack`, `cluster-state-diff`, `resolve-advisory-symbols`, `sweep` |
 | `ledger` | Doc-variance register | `doc-variance` |
 | `metrics` | Metrics & spend | `attribute-spend`, `collect-spend`, `history`, `sla`, `spend` |
