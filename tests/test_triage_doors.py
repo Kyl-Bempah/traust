@@ -144,6 +144,7 @@ def test_scanner_output_triaged_and_recorded(home: Path, tmp_path: Path) -> None
 
     rc, out = run(triage.render, home, str(path))
     assert rc == 0 and "## Act on these" in out and "(f001)" in out
+    assert not (Path.cwd() / "artifacts").exists(), "artifacts belong under the core home"
 
 
 def test_a_triage_not_matching_the_assessment_is_refused(

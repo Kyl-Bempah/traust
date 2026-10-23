@@ -272,8 +272,7 @@ source format.
   ```
 
   Never hand-parse these formats. Suppressed SARIF results are skipped.
-  A scanner that gives no severity reports `unrated`. Intake refuses a
-  CWE missing from the catalog: say so and stop rather than strip it.
+  A scanner that gives no severity reports `unrated`.
 - **(C) Anything else** (the formats below): triage it with the generic
   rules. There are no recorded findings to attach verdicts to, so 6e
   doesn't apply; say so in the terminal summary.
