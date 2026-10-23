@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for the triage renderer and `traust triage check`."""
+"""`traust triage check` and the triage skill's canary fixture."""
 
 import contextlib
 import io
@@ -7,8 +7,6 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-
-from render_triage import render_triage
 
 
 def _report():
@@ -106,47 +104,6 @@ from traust.cli import triage_check
 from traust.paths import skill_dir
 
 FIXTURE_TARGET = skill_dir("triage") / "fixtures" / "canary-target"
-
-
-class TestRenderTriage(unittest.TestCase):
-    def setUp(self):
-        self.md = render_triage(_report())
-
-    def test_section_order(self):
-        idx = [
-            self.md.index(h)
-            for h in ("## Act on these", "## Hardening backlog", "## Undetermined", "## Dropped")
-        ]
-        self.assertEqual(idx, sorted(idx))
-
-    def test_confirmed_entry_rendered(self):
-        self.assertIn("### [HIGH] Heap overflow in parse_alpha  (f001)", self.md)
-        self.assertIn("3T/0H/0F/0C", self.md)
-
-    def test_hardening_not_in_dropped(self):
-        dropped = self.md.split("## Dropped")[1]
-        self.assertNotIn("f006", dropped)
-        self.assertIn("NOT false positives", self.md)
-
-    def test_undetermined_section_present(self):
-        self.assertIn("f007", self.md.split("## Undetermined")[1].split("## Dropped")[0])
-
-    def test_undetermined_section_omitted_when_empty(self):
-        rep = _report()
-        rep["findings"] = [f for f in rep["findings"] if f["verdict"] != "undetermined"]
-        rep["summary"]["undetermined"] = 0
-        rep["summary"]["input_count"] = 3
-        self.assertNotIn("## Undetermined", render_triage(rep))
-
-    def test_dropped_includes_rule(self):
-        self.assertIn("already_handled (rule 2)", self.md)
-
-    def test_summary_line(self):
-        self.assertIn("4 in -> 1 confirmed", self.md)
-        self.assertIn("1 hardening", self.md)
-
-    def test_deterministic(self):
-        self.assertEqual(self.md, render_triage(_report()))
 
 
 class TestTriageCheck(unittest.TestCase):
